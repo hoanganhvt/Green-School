@@ -33,7 +33,7 @@ catch {
 const test = process.argv[2] === 'test';
 if (process.argv.length > (test ? 3 : 2) || (process.argv[2] && !test)) throw new Error('Only local emulator commands are supported.');
 if (test) env.GS_EMULATOR_TEST = '1';
-const args = [cli, test ? 'emulators:exec' : 'emulators:start', '--project', 'demo-green-school', '--only', 'auth,database,functions,hosting'];
+const args = [cli, test ? 'emulators:exec' : 'emulators:start', '--project', 'demo-green-school', '--only', 'auth,database,hosting'];
 if (test) args.push('node --test tests/emulator.integration.cjs');
 else {
   if (fs.existsSync(path.join(root, '.emulator-data/firebase-export-metadata.json'))) args.push('--import', '.emulator-data');

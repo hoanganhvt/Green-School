@@ -1,28 +1,34 @@
-"""Read GS_DROP from ESP32 USB and send authenticated HTTPS events to Firebase.
+"""Read GS_DROP from ESP32 USB and send HTTPS events using the configured bin ID.
 
 Run from the project root:
-    py hardware/firebase_http_bridge.py --port COM5 --email bin01@example.com
-Password is prompted, or read from GS_DEVICE_PASSWORD. Close Serial Monitor first.
+    py hardware/firebase_http_bridge.py --port COM5
+Bin ID is loaded from hardware/bin_config.json. Close Serial Monitor first.
 Only this process may read the ESP32 COM port. Camera integration can import
 FirebaseBridge and call send_drop(sensor, captured_ms) after a confirmed drop.
 """
 
 import argparse
-import getpass
 import json
-import os
+from pathlib import Path
 import queue
 import re
 import threading
 import time
 import uuid
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 DATABASE_URL = "https://smarttrashbin-98428-default-rtdb.asia-southeast1.firebasedatabase.app"
-API_KEY = "AIzaSyAb2JRA1H3J5Rd38nYQ9aJN_IMjltx-Mes"
 EVENT_TTL_MS = 30000
+DEFAULT_CONFIG = Path(__file__).with_name("bin_config.json")
+
+
+def load_bin_id(path):
+    config = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    bin_id = config.get("bin_id") if isinstance(config, dict) else None
+    if not isinstance(bin_id, str) or not re.fullmatch(r"[A-Z0-9_-]{1,128}", bin_id):
+        raise ValueError("Config must contain bin_id (1-128 uppercase letters, digits, _ or -)")
+    return bin_id
 
 
 def http_json(method, url, body=None, headers=None):
@@ -41,43 +47,24 @@ def parse_drop(line):
 def error_message(error):
     # HTTPError/URLError strings can contain URLs with authentication tokens.
     if isinstance(error, HTTPError):
-        return f"HTTP {error.code} (check device account, permission and connection)"
+        return f"HTTP {error.code} (check bin config, deployed database Rules and connection)"
     return type(error).__name__
 
 
 class FirebaseBridge:
-    def __init__(self, email, password, bin_id="BIN-01", sensor1="plastic", sensor2="metal"):
-        self.email, self.password, self.bin_id = email, password, bin_id
+    def __init__(self, bin_id, sensor1="plastic", sensor2="metal"):
+        if not isinstance(bin_id, str) or not re.fullmatch(r"[A-Z0-9_-]{1,128}", bin_id):
+            raise ValueError("Invalid bin ID")
+        self.bin_id = bin_id
         self.types = {1: sensor1, 2: sensor2}
-        self.token = None
-        self.uid = None
-        self.expires = 0
-
-    def login(self):
-        auth = http_json("POST", "https://identitytoolkit.googleapis.com/v1/"
-                         "accounts:signInWithPassword?" + urlencode({"key": API_KEY}), {
-                             "email": self.email, "password": self.password,
-                             "returnSecureToken": True,
-                         })
-        self.token, self.uid = auth["idToken"], auth["localId"]
-        self.expires = time.monotonic() + int(auth["expiresIn"]) - 60
 
     def db(self, method, path, body=None, headers=None):
-        if not self.token or time.monotonic() >= self.expires:
-            self.login()
-        url = f"{DATABASE_URL}/{path}.json?" + urlencode({"auth": self.token})
-        try:
-            return http_json(method, url, body, headers)
-        except HTTPError as error:
-            if error.code == 401:
-                self.expires = 0
-            raise
+        return http_json(method, f"{DATABASE_URL}/{path}.json", body, headers)
 
-    def check_device(self):
-        self.login()
-        device = self.db("GET", f"devices/{self.uid}")
-        if not device or device.get("enabled") is not True or device.get("binId") != self.bin_id:
-            raise ValueError("Device must be enabled and assigned to " + self.bin_id)
+    def check_bin(self):
+        bin_data = self.db("GET", f"bins/{self.bin_id}")
+        if not isinstance(bin_data, dict) or bin_data.get("id") != self.bin_id:
+            raise ValueError("Bin does not exist; create " + self.bin_id + " in the admin website first")
 
     def heartbeat(self):
         self.db("PATCH", f"bins/{self.bin_id}", {
@@ -108,7 +95,7 @@ class FirebaseBridge:
                         return False
                     event = {
                         "txId": tx_id, "binId": self.bin_id, "type": self.types[sensor],
-                        "deviceUid": self.uid, "studentCode": session["studentCode"],
+                        "studentCode": session["studentCode"],
                         "username": session["username"], "ts": captured_ms,
                         "source": "esp32", "status": "pending",
                     }
@@ -121,7 +108,7 @@ class FirebaseBridge:
                     # reject a repeated create before checking the ETag (401/403).
                     existing = self.db("GET", f"events/{tx_id}")
                     if not existing or any(existing.get(k) != event[k] for k in (
-                            "txId", "deviceUid", "binId", "ts", "type", "studentCode", "username")):
+                            "txId", "binId", "ts", "type", "studentCode", "username")):
                         raise
                 print(f"SENT {tx_id}: {event['type']} (accepted by database; scoring not confirmed)", flush=True)
                 return True
@@ -135,20 +122,18 @@ class FirebaseBridge:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", required=True, help="ESP32 port, e.g. COM5")
-    parser.add_argument("--email", default=os.getenv("GS_DEVICE_EMAIL"))
-    parser.add_argument("--bin-id", default="BIN-01")
+    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG, help="JSON file containing bin_id")
     parser.add_argument("--sensor1", choices=("plastic", "metal"), default="plastic")
     parser.add_argument("--sensor2", choices=("plastic", "metal"), default="metal")
     args = parser.parse_args()
-    if not args.email:
-        parser.error("Supply --email or GS_DEVICE_EMAIL (device account, not admin)")
-    if not re.fullmatch(r"[A-Z0-9_-]+", args.bin_id):
-        parser.error("Invalid --bin-id")
-    password = os.getenv("GS_DEVICE_PASSWORD") or getpass.getpass("Device password: ")
+    try:
+        bin_id = load_bin_id(args.config)
+    except (OSError, ValueError) as error:
+        parser.error(f"Cannot load bin config: {error}")
     import serial
 
-    bridge = FirebaseBridge(args.email, password, args.bin_id, args.sensor1, args.sensor2)
-    bridge.check_device()
+    bridge = FirebaseBridge(bin_id, args.sensor1, args.sensor2)
+    bridge.check_bin()
     drops = queue.Queue(maxsize=100)
     stop = threading.Event()
 
@@ -171,7 +156,7 @@ def main():
     with serial.Serial(args.port, 115200, timeout=1) as esp:
         worker = threading.Thread(target=sender, daemon=True)
         worker.start()
-        print(f"Listening on {args.port} -> {args.bin_id}. Ctrl+C to stop.", flush=True)
+        print(f"Listening on {args.port} -> {bin_id}. Ctrl+C to stop.", flush=True)
         try:
             while True:
                 if not worker.is_alive():

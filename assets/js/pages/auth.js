@@ -160,7 +160,7 @@
           <li><span class="flow-ic">${U.icon('camera')}</span><b>Camera + Edge Impulse</b><p>Mô hình nhận diện vật thể là nhựa hay kim loại.</p></li>
           <li><span class="flow-ic">${U.icon('bolt')}</span><b>ESP32</b><p>Mở nắp bằng servo, bật LED theo loại rác, cảm biến xác nhận rác đã rơi vào thùng.</p></li>
           <li><span class="flow-ic">${U.icon('database')}</span><b>Firebase Realtime Database</b><p>ESP32 gửi lượt đếm qua USB; cầu nối máy tính chuyển sự kiện vào Firebase.</p></li>
-          <li><span class="flow-ic">${U.icon('trophy')}</span><b>Cộng điểm tức thì</b><p>Cloud Functions kiểm tra phiên, tính điểm và cập nhật bảng xếp hạng.</p></li>
+          <li><span class="flow-ic">${U.icon('trophy')}</span><b>Cộng điểm tức thì</b><p>Hệ thống kiểm tra phiên, tính điểm và cập nhật bảng xếp hạng.</p></li>
         </ol>
 
         <div class="split section">

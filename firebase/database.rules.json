@@ -93,10 +93,12 @@
           ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
         },
         "lastSeen": {
-          ".write": "(auth != null && root.child('admins/' + auth.uid).val() === true) || ((auth != null && root.child('devices/' + auth.uid + '/enabled').val() === true) && root.child('devices/' + auth.uid + '/binId').val() === $bin && data.parent().child('id').exists())"
+          ".write": "(auth != null && root.child('admins/' + auth.uid).val() === true) || (root.child('bins/' + $bin + '/id').val() === $bin && newData.exists())",
+          ".validate": "(auth != null && root.child('admins/' + auth.uid).val() === true) || (newData.isNumber() && newData.val() >= now - 60000 && newData.val() <= now + 15000)"
         },
         "ip": {
-          ".write": "(auth != null && root.child('admins/' + auth.uid).val() === true) || ((auth != null && root.child('devices/' + auth.uid + '/enabled').val() === true) && root.child('devices/' + auth.uid + '/binId').val() === $bin && data.parent().child('id').exists())"
+          ".write": "(auth != null && root.child('admins/' + auth.uid).val() === true) || (root.child('bins/' + $bin + '/id').val() === $bin && newData.exists())",
+          ".validate": "(auth != null && root.child('admins/' + auth.uid).val() === true) || (newData.isString() && newData.val() === 'python-usb-bridge')"
         }
       }
     },
@@ -109,8 +111,36 @@
         "ts"
       ],
       "$txId": {
-        ".write": "(auth != null && root.child('admins/' + auth.uid).val() === true) || ((auth != null && root.child('devices/' + auth.uid + '/enabled').val() === true) && !data.exists() && newData.child('deviceUid').val() === auth.uid && newData.child('binId').val() === root.child('devices/' + auth.uid + '/binId').val() && newData.child('source').val() === 'esp32' && newData.child('status').val() === 'pending' && root.child('bins/' + newData.child('binId').val() + '/id').exists())",
-        ".validate": "newData.hasChildren(['txId','binId','type','status','ts','source']) && newData.child('txId').val() === $txId && newData.child('binId').isString() && newData.child('type').isString() && newData.child('ts').isNumber() && newData.child('ts').val() >= now - 60000 && newData.child('ts').val() <= now + 15000 && ((newData.child('source').val() === 'esp32' && newData.child('status').val() === 'pending') || (auth != null && root.child('admins/' + auth.uid).val() === true))"
+        ".write": "(auth != null && root.child('admins/' + auth.uid).val() === true) || (!data.exists() && newData.hasChildren(['txId','binId','type','status','ts','source','studentCode','username']) && newData.child('binId').isString() && newData.child('binId').val().matches(/^[A-Z0-9_-]{1,128}$/) && root.child('bins/' + newData.child('binId').val()).child('id').val() === newData.child('binId').val() && newData.child('source').val() === 'esp32' && newData.child('status').val() === 'pending' && newData.child('type').isString() && newData.child('type').val().matches(/^[A-Za-z0-9_-]{1,128}$/) && root.child('settings/rules/' + newData.child('type').val()).exists() && root.child('settings/rules/' + newData.child('type').val() + '/enabled').val() !== false && root.child('bins/' + newData.child('binId').val()).child('activeSession').child('expiresAt').val() > now && root.child('bins/' + newData.child('binId').val()).child('activeSession').child('startedAt').val() <= newData.child('ts').val() && root.child('bins/' + newData.child('binId').val()).child('activeSession').child('studentCode').val() === newData.child('studentCode').val() && root.child('bins/' + newData.child('binId').val()).child('activeSession').child('username').val() === newData.child('username').val())",
+        ".validate": "newData.hasChildren(['txId','binId','type','status','ts','source']) && newData.child('txId').val() === $txId && newData.child('binId').isString() && newData.child('type').isString() && newData.child('ts').isNumber() && newData.child('ts').val() >= now - 60000 && newData.child('ts').val() <= now + 15000 && ((newData.child('source').val() === 'esp32' && newData.child('status').val() === 'pending') || (auth != null && root.child('admins/' + auth.uid).val() === true))",
+        ".read": true,
+        "txId": {
+          ".validate": true
+        },
+        "binId": {
+          ".validate": true
+        },
+        "type": {
+          ".validate": true
+        },
+        "status": {
+          ".validate": true
+        },
+        "ts": {
+          ".validate": true
+        },
+        "source": {
+          ".validate": true
+        },
+        "studentCode": {
+          ".validate": true
+        },
+        "username": {
+          ".validate": true
+        },
+        "$other": {
+          ".validate": "auth != null && root.child('admins/' + auth.uid).val() === true"
+        }
       }
     },
     "transactions": {
@@ -123,13 +153,6 @@
       ],
       "$txId": {
         ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
-      }
-    },
-    "devices": {
-      ".read": "auth != null && root.child('admins/' + auth.uid).val() === true",
-      ".write": "auth != null && root.child('admins/' + auth.uid).val() === true",
-      "$uid": {
-        ".read": "auth != null && auth.uid === $uid"
       }
     }
   }

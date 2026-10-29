@@ -2,13 +2,6 @@
   "database": {
     "rules": "firebase/database.rules.json"
   },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "green-school",
-      "runtime": "nodejs22"
-    }
-  ],
   "emulators": {
     "auth": {
       "host": "127.0.0.1",
@@ -17,10 +10,6 @@
     "database": {
       "host": "127.0.0.1",
       "port": 9000
-    },
-    "functions": {
-      "host": "127.0.0.1",
-      "port": 5001
     },
     "hosting": {
       "host": "127.0.0.1",

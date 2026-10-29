@@ -3,10 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "backend": "node --env-file-if-exists=.env backend/index.cjs",
     "emulators": "node scripts/emulators.cjs",
     "test": "node --test tests/*.test.cjs",
     "test:emulators": "node scripts/emulators.cjs test",
     "seed:emulators": "node scripts/seed-emulators.cjs"
   },
+  "engines": { "node": ">=22.9.0" },
+  "dependencies": { "firebase-admin": "^13.0.0" },
   "devDependencies": { "firebase-tools": "15.34.0" }
 }

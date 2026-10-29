@@ -1,5 +1,11 @@
 # Phương án ESP32 + Firebase, không dùng Blaze
 
+> Tài liệu phương án cũ, không phải hướng dẫn vận hành hiện tại. Luồng được chọn
+> là ESP32 qua USB tới laptop, cấu hình ID thùng trong `hardware/bin_config.json`,
+> backend cộng điểm chạy trên laptop, không dùng Cloud Functions/Blaze hoặc tài
+> khoản thiết bị. Xem [README.md](README.md) và
+> [hướng dẫn bridge](hardware/README_HTTP_BRIDGE.md).
+
 Ngày: 29/10/2026. Tài liệu bàn giao cho bước triển khai tiếp theo.
 
 ## 1. Quyết định và trạng thái

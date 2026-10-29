@@ -3,10 +3,21 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { db, account } = require('../scripts/local-api.cjs');
 const { seed } = require('../scripts/seed-emulators.cjs');
+const { initializeApp, deleteApp } = require('firebase-admin/app');
+const { getDatabase } = require('firebase-admin/database');
+const { runWorker, processEvent } = require('../backend/worker.cjs');
 
-test('local Auth + RTDB Rules + Functions end-to-end', { timeout: 60000 }, async () => {
+test('Auth + RTDB Rules + laptop backend end-to-end', { timeout: 60000 }, async t => {
   assert.equal(process.env.GS_EMULATOR_TEST, '1', 'Run through npm.cmd run test:emulators in a fresh emulator process.');
-  const { admin, student, device } = await seed();
+  assert.match(process.env.FIREBASE_DATABASE_EMULATOR_HOST || '', /^(127\.0\.0\.1|localhost):9000$/);
+  const app = initializeApp({ projectId: 'demo-green-school', databaseURL: 'https://demo-green-school-default-rtdb.firebaseio.com' }, 'backend-integration');
+  const database = getDatabase(app);
+  const stop = new AbortController();
+  const backendErrors = [];
+  let worker;
+  t.after(async () => { stop.abort(); await worker; await deleteApp(app); });
+  const { admin, student } = await seed();
+  worker = runWorker(database, { signal: stop.signal, log: () => {}, onError: message => backendErrors.push(message) });
   const sid = student.localId;
   const aid = admin.localId;
   await assert.rejects(db('events/ANONYMOUS', 'PUT', { txId: 'ANONYMOUS', binId: 'BIN-01', type: 'plastic', status: 'pending', source: 'esp32', ts: Date.now() }), /401|403/);
@@ -30,28 +41,50 @@ test('local Auth + RTDB Rules + Functions end-to-end', { timeout: 60000 }, async
   await db('bins/BIN-01/activeSession', 'PUT', session, student.idToken);
   await assert.rejects(db('bins/BIN-01/activeSession', 'DELETE', undefined, user2.idToken), /401|403/);
   await assert.rejects(db('bins/BIN-01/activeSession', 'PUT', { ...session, uid: user2.localId, studentCode: '10A2-TEST', classId: '10A2', username: 'newstudent' }, user2.idToken), /401|403/);
-  async function send(id, overrides = {}, token = device.idToken) {
-    await db(`events/${id}`, 'PUT', { txId: id, binId: 'BIN-01', type: 'plastic', status: 'pending', source: 'esp32', deviceUid: device.localId, ts: { '.sv': 'timestamp' }, ...overrides }, token);
+  const payload = (id, overrides = {}) => ({ txId: id, binId: 'BIN-01', type: 'plastic', status: 'pending', source: 'esp32', studentCode: session.studentCode, username: session.username, ts: { '.sv': 'timestamp' }, ...overrides });
+  for (const overrides of [
+    { binId: 'BIN-UNKNOWN' }, { studentCode: '10A2-TEST' }, { username: 'other' },
+    { points: 9999 }, { type: 'paper' }, { ts: Date.now() - 61000 },
+    { source: 'sim', createdBy: aid }, { status: 'processed' }
+  ]) await assert.rejects(db('events/INVALID', 'PUT', payload('INVALID', overrides)), /401|403/);
+  await assert.rejects(db('events', 'GET'), /401|403/);
+  await assert.rejects(db('classes/10A1/points', 'PUT', 9999), /401|403/);
+  await db('bins/BIN-01', 'PATCH', { lastSeen: { '.sv': 'timestamp' }, ip: 'python-usb-bridge' });
+  await assert.rejects(db('bins/BIN-UNKNOWN/lastSeen', 'PUT', Date.now()), /401|403/);
+  await assert.rejects(db('bins/BIN-01', 'PATCH', { count: 9999 }), /401|403/);
+  await assert.rejects(db('bins/BIN-01/lastSeen', 'DELETE'), /401|403/);
+  async function send(id, overrides = {}, token) {
+    await db(`events/${id}`, 'PUT', payload(id, overrides), token);
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
       const event = await db(`events/${id}`, 'GET', undefined, admin.idToken);
       if (event.status !== 'pending') return event;
       await new Promise(resolve => setTimeout(resolve, 100));
     }
-    throw new Error(`Function did not process ${id}`);
+    throw new Error(`Laptop backend did not process ${id}. ${backendErrors.join('; ')}`);
   }
-  assert.equal((await send('INTEGRATION-OK')).status, 'processed');
+  const first = await send('INTEGRATION-OK');
+  assert.equal(first.status, 'processed');
   assert.equal((await db('classes/10A1')).points, 2);
   await assert.rejects(db('events/INTEGRATION-OK', 'PUT', { status: 'pending' }), /401|403/);
-  assert.equal((await send('INTEGRATION-FAST')).status, 'rejected');
-  assert.equal((await send('INTEGRATION-PAPER', { type: 'paper' })).status, 'rejected');
+  assert.equal((await send('INTEGRATION-FAST', { ts: first.ts + 1 })).status, 'rejected');
+  await assert.rejects(db('events/INTEGRATION-OK', 'DELETE'), /401|403/);
+  assert.equal((await db('events/INTEGRATION-OK')).status, 'processed');
   await assert.rejects(send('INTEGRATION-SPOOF', { source: 'sim', createdBy: aid, studentCode: '10A2-TEST' }, student.idToken), /401|403/);
   // Rejected events do not increase aggregates; processing needs no browser at all.
   assert.equal((await db('classes/10A1')).points, 2);
   assert.equal((await db('classes/10A2')).points, 0);
   await db('bins/BIN-01/activeSession', 'DELETE', undefined, student.idToken);
-  assert.equal((await send('INTEGRATION-NO-SESSION')).status, 'rejected');
+  await assert.rejects(send('INTEGRATION-NO-SESSION'), /401|403/);
   const sim = await send('INTEGRATION-ADMIN', { source: 'sim', createdBy: aid, studentCode: '10A2-TEST', type: 'metal' }, admin.idToken);
   assert.equal(sim.status, 'processed');
   assert.equal((await db('classes/10A2')).points, 3);
+  // Multiple laptop workers racing on the same drop must still count it once.
+  await db('students/10A1-DEMO/lastTs', 'DELETE', undefined, admin.idToken);
+  await db('bins/BIN-01/activeSession', 'PUT', { ...session, startedAt: Date.now() - 1000, expiresAt: Date.now() + 180000 }, student.idToken);
+  await db('events/CONCURRENT', 'PUT', payload('CONCURRENT'));
+  await Promise.all([processEvent(database, 'CONCURRENT'), processEvent(database, 'CONCURRENT')]);
+  assert.equal((await db('classes/10A1')).points, 4);
+  assert.equal((await db('events/CONCURRENT')).status, 'processed');
+  assert.deepEqual(backendErrors, []);
 });

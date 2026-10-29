@@ -14,7 +14,7 @@ function weekKey(ts) {
 const safeKey = (v) => typeof v === 'string' && v.length > 0 && v.length <= 128
   && !/[.#$\[\]/]/.test(v) && !['__proto__', 'constructor', 'prototype'].includes(v);
 
-// The root transaction makes duplicate deliveries and concurrent cooldown checks atomic.
+// The laptop backend uses a root transaction for deduplication and atomic cooldown checks.
 // shortcut: whole-school transaction, partition by season/bin when contention grows.
 function scoreEvent(root, id, now) {
   if (!root || !safeKey(id)) return;
@@ -35,9 +35,9 @@ function scoreEvent(root, id, now) {
   const simulation = ev.source === 'sim' && safeKey(ev.createdBy) && root.admins?.[ev.createdBy] === true
     && root.users?.[ev.createdBy]?.status === 'active';
   if (ev.source === 'sim' && !simulation) return fail('Chỉ quản trị viên được gửi lượt thử');
-  const device = safeKey(ev.deviceUid) && root.devices?.[ev.deviceUid];
-  if (!simulation && (ev.source !== 'esp32' || !device || device.enabled !== true || device.binId !== ev.binId)) {
-    return fail('Thiết bị không được phép gửi sự kiện cho thùng này');
+  // Bin IDs identify the sender; they do not authenticate physical hardware.
+  if (!simulation && ev.source !== 'esp32') {
+    return fail('Nguồn sự kiện không hợp lệ');
   }
   const ts = Number(ev.ts);
   if (!Number.isFinite(ts) || ts > now + 15000 || ts < now - 60000) return fail('Thời gian sự kiện không hợp lệ hoặc quá cũ');

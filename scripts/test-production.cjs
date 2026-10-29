@@ -15,7 +15,7 @@ async function main() {
   for (const [, src] of html.matchAll(/(?:src|href)="((?:assets\/)[^"]+)"/g)) {
     assert.equal((await fetch(`${origin}/${src}`)).status, 200, src);
   }
-  for (const file of ['firebase.json', 'functions/index.js', 'PROJECT_HANDOFF.md', 'package.json']) {
+  for (const file of ['firebase.json', 'backend/index.cjs', 'backend/scoring.cjs', '.env', '.secrets/firebase-service-account.json', 'package.json']) {
     assert.equal((await fetch(`${origin}/${file}`)).status, 404, `${file} must not be public`);
   }
   const mapping = await (await fetch(`${cfg.databaseURL}/usernames/admin.json`)).json();

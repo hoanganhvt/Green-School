@@ -12,13 +12,11 @@ async function seed() {
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../assets/js/config.js'), 'utf8'), context);
   const admin = await account('signUp', 'admin@greenschool.app', 'admin123');
   const student = await account('signUp', 'hs10a1@greenschool.app', '123456');
-  const device = await account('signUp', 'bin01@devices.greenschool.app', 'device-demo-123');
   const now = Date.now();
   const root = {
     settings: context.GS.DEFAULTS,
     meta: { hasAdmin: true, seeded: true },
     admins: { [admin.localId]: true },
-    devices: { [device.localId]: { binId: 'BIN-01', enabled: true } },
     users: {
       [admin.localId]: { uid: admin.localId, username: 'admin', fullName: 'Quản trị local', role: 'admin', status: 'active', createdAt: now },
       [student.localId]: { uid: student.localId, username: 'hs10a1', fullName: 'Nguyễn Minh An', className: '10A1', classId: '10A1', studentCode: '10A1-DEMO', role: 'student', status: 'active', createdAt: now }
@@ -39,7 +37,7 @@ async function seed() {
   };
   await db('', 'PUT', root, 'owner');
   console.log('Seeded demo-green-school locally. admin/admin123; hs10a1/123456.');
-  return { admin, student, device };
+  return { admin, student };
 }
 if (require.main === module) seed().catch((e) => { console.error(e.message); process.exitCode = 1; });
 module.exports = { seed };

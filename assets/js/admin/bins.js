@@ -39,17 +39,17 @@
   };
 
   const binForm = (b = {}) => `
-    <label class="field"><span>Mã thùng</span><input name="id" required ${b.id ? 'readonly' : ''} value="${U.esc(b.id || '')}" placeholder="BIN-04" autocapitalize="characters"><small class="hint">Chữ không dấu, số, gạch ngang. Mã này nạp vào code ESP32 (BIN_ID) và không đổi được sau khi tạo.</small></label>
+    <label class="field"><span>Mã thùng</span><input name="id" required ${b.id ? 'readonly' : ''} value="${U.esc(b.id || '')}" placeholder="BIN-04" autocapitalize="characters"><small class="hint">Chữ không dấu, số, gạch ngang. Đặt mã này trong hardware/bin_config.json trên laptop; mã không đổi được sau khi tạo.</small></label>
     <label class="field"><span>Tên thùng</span><input name="name" required value="${U.esc(b.name || '')}" placeholder="Thùng hành lang tầng 2"></label>
     <label class="field"><span>Vị trí đặt</span><input name="location" value="${U.esc(b.location || '')}" placeholder="Cạnh cầu thang dãy B"></label>`;
 
   const connectInfo = (b) => {
     const cfg = GS.svc.firebaseConfig();
     const url = GS.USE_EMULATORS ? 'http://127.0.0.1:9000' : cfg && cfg.databaseURL ? cfg.databaseURL.replace(/\/$/, '') : 'https://<ten-du-an>-default-rtdb.<vung>.firebasedatabase.app';
-    const suffix = GS.USE_EMULATORS ? '?ns=demo-green-school-default-rtdb&auth=<ID_TOKEN>' : '?auth=<ID_TOKEN>';
-    const ex = JSON.stringify({ txId: 'TX1729500000-BIN01-0007', binId: b.id, type: 'plastic', deviceUid: '<UID tài khoản thiết bị>', studentCode: '<lấy từ activeSession>', ts: { '.sv': 'timestamp' }, status: 'pending', source: 'esp32' }, null, 2);
+    const suffix = GS.USE_EMULATORS ? '?ns=demo-green-school-default-rtdb' : '';
+    const ex = JSON.stringify({ txId: 'USB-<UUID mới>', binId: b.id, type: 'plastic', studentCode: '<lấy từ activeSession>', username: '<lấy từ activeSession>', ts: { '.sv': 'timestamp' }, status: 'pending', source: 'esp32' }, null, 2);
     return `
-      <p class="muted">Firmware chính là <code>hardware/Green-School/Green-School.ino</code>. Chạy <code>hardware/firebase_usb_bridge.ps1</code> để chuyển lượt đếm USB sang Firebase local. Các yêu cầu REST cần ID token của tài khoản thiết bị đã được cấp quyền trong <code>/devices</code>.</p>
+      <p class="muted">Đặt <code>bin_id</code> trong <code>hardware/bin_config.json</code> bằng mã thùng rồi chạy <code>py hardware/firebase_http_bridge.py --port COM5</code>. Laptop nhận USB từ firmware <code>hardware/Green-School/Green-School.ino</code> và gửi HTTPS, không cần email/mật khẩu thiết bị. ID thùng chỉ định danh, không xác thực nguồn gửi.</p>
       <dl class="kv">
         <dt>BIN_ID</dt><dd><code>${U.esc(b.id)}</code></dd>
         <dt>DATABASE_URL</dt><dd><code>${U.esc(url)}</code></dd>
@@ -59,7 +59,7 @@
       <h4>2. Gửi lượt bỏ rác (mỗi lượt một txId mới)</h4>
       <pre class="code-block">PUT ${U.esc(url)}/events/&lt;txId&gt;.json${U.esc(suffix)}\n${U.esc(ex)}</pre>
       <h4>3. Báo thùng còn hoạt động (mỗi 30 giây)</h4>
-      <pre class="code-block">PATCH ${U.esc(url)}/bins/${U.esc(b.id)}.json${U.esc(suffix)}\n{ "lastSeen": { ".sv": "timestamp" }, "ip": "192.168.1.50" }</pre>
+      <pre class="code-block">PATCH ${U.esc(url)}/bins/${U.esc(b.id)}.json${U.esc(suffix)}\n{ "lastSeen": { ".sv": "timestamp" }, "ip": "python-usb-bridge" }</pre>
       <p class="hint">Giá trị <code>type</code> phải trùng khoá quy tắc điểm (trang Cài đặt), ví dụ nhãn mô hình Edge Impulse <code>plastic</code>, <code>metal</code>.</p>`;
   };
 

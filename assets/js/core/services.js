@@ -234,7 +234,7 @@
      (giao dịch "claim" pending → processing chỉ thành công ở 1 máy). */
   const inflight = new Set();
   S.processEvent = async (id) => {
-    if (GS.db.mode !== 'demo') return; // Firebase events are handled by Cloud Functions.
+    if (GS.db.mode !== 'demo') return; // Firebase events are handled by the laptop backend.
     if (inflight.has(id)) return;
     inflight.add(id);
     try {

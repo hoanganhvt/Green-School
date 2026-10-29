@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { scoreEvent, weekKey } = require('../functions/scoring');
+const { scoreEvent, weekKey } = require('../backend/scoring.cjs');
 const now = Date.parse('2026-10-29T06:00:00Z');
 function fixture(patch = {}) {
   return {
@@ -11,8 +11,7 @@ function fixture(patch = {}) {
     students: { S1: { uid: 'u1', classId: '10A1', className: '10A1', fullName: 'An', username: 'student' } },
     users: { u1: { status: 'active', studentCode: 'S1' }, admin: { status: 'active' } },
     admins: { admin: true },
-    devices: { device: { binId: 'BIN-01', enabled: true } },
-    events: { TX1: { txId: 'TX1', binId: 'BIN-01', type: 'plastic', ts: now, deviceUid: 'device', source: 'esp32', status: 'pending', ...patch } }
+    events: { TX1: { txId: 'TX1', binId: 'BIN-01', type: 'plastic', ts: now, source: 'esp32', status: 'pending', ...patch } }
   };
 }
 test('scores all aggregates and extends session atomically; redelivery is a no-op', () => {
@@ -39,9 +38,7 @@ for (const [name, mutate] of [
   ['wrong student', r => { r.events.TX1.studentCode = 'S2'; }],
   ['wrong session uid', r => { r.bins['BIN-01'].activeSession.uid = 'other'; }],
   ['locked user', r => { r.users.u1.status = 'locked'; }],
-  ['disabled device', r => { r.devices.device.enabled = false; }],
-  ['wrong device bin', r => { r.devices.device.binId = 'BIN-02'; }],
-  ['missing device uid', r => { delete r.events.TX1.deviceUid; }],
+  ['unknown source', r => { r.events.TX1.source = 'unknown'; }],
   ['cooldown', r => { r.students.S1.lastTs = now - 2000; }],
   ['out of order', r => { r.students.S1.lastTs = now + 1; }],
   ['stale timestamp', r => { r.events.TX1.ts = now - 61000; }],
