@@ -1,0 +1,136 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "settings": {
+      ".read": true,
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+    },
+    "meta": {
+      ".read": true,
+      "hasAdmin": {
+        ".write": "auth != null && root.child('admins/' + auth.uid).val() === true",
+        ".validate": "newData.val() === true"
+      }
+    },
+    "admins": {
+      ".read": "auth != null && root.child('admins/' + auth.uid).val() === true",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+      }
+    },
+    "classes": {
+      ".read": true,
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+    },
+    "weekly": {
+      ".read": true,
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+    },
+    "students": {
+      ".read": "auth != null && root.child('admins/' + auth.uid).val() === true",
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() === true",
+      "$code": {
+        ".read": true,
+        ".write": "auth != null && root.child('admins/' + auth.uid).val() === true",
+        "uid": {
+          ".write": "auth != null && ((!data.exists() && newData.val() === auth.uid) || root.child('admins/' + auth.uid).val() === true)"
+        },
+        "username": {
+          ".write": "auth != null && (root.child('students/' + $code + '/uid').val() === auth.uid || newData.parent().child('uid').val() === auth.uid || root.child('admins/' + auth.uid).val() === true)"
+        },
+        "registeredAt": {
+          ".write": "auth != null && (newData.parent().child('uid').val() === auth.uid || root.child('admins/' + auth.uid).val() === true)"
+        },
+        "points": {
+          ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+        },
+        "count": {
+          ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+        },
+        "byType": {
+          ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+        },
+        "lastTs": {
+          ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+        }
+      }
+    },
+    "users": {
+      ".read": "auth != null && root.child('admins/' + auth.uid).val() === true",
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins/' + auth.uid).val() === true)",
+        ".write": "auth != null && (auth.uid === $uid || root.child('admins/' + auth.uid).val() === true)",
+        "role": {
+          ".validate": "newData.val() === 'student' || root.child('admins/' + auth.uid).val() === true"
+        },
+        "status": {
+          ".validate": "root.child('admins/' + auth.uid).val() === true || (!data.exists() && newData.val() === 'active')"
+        },
+        ".validate": "(auth != null && root.child('admins/' + auth.uid).val() === true) || (newData.hasChildren(['uid','username','role','status','studentCode','classId','fullName']) && newData.child('uid').val() === auth.uid && newData.child('role').val() === 'student' && newData.child('classId').val() === root.child('students/' + newData.child('studentCode').val() + '/classId').val() && newData.child('fullName').val() === root.child('students/' + newData.child('studentCode').val() + '/fullName').val() && (!data.exists() || (newData.child('studentCode').val() === data.child('studentCode').val() && newData.child('username').val() === data.child('username').val())))"
+      }
+    },
+    "usernames": {
+      ".read": true,
+      "$username": {
+        ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid || root.child('users/' + data.child('uid').val() + '/status').val() === 'reset' || !root.child('users/' + data.child('uid').val()).exists() || root.child('admins/' + auth.uid).val() === true)",
+        ".validate": "(auth != null && root.child('admins/' + auth.uid).val() === true) || (newData.child('uid').val() === auth.uid && newData.child('email').val() === auth.token.email && newData.child('studentCode').isString())"
+      }
+    },
+    "bins": {
+      ".read": true,
+      "$bin": {
+        ".write": "auth != null && root.child('admins/' + auth.uid).val() === true",
+        "activeSession": {
+          ".write": "(auth != null && root.child('admins/' + auth.uid).val() === true) || ((auth != null && root.child('users/' + auth.uid + '/status').val() === 'active') && root.child('bins/' + $bin + '/id').exists() && ((!newData.exists() && data.child('uid').val() === auth.uid) || (newData.child('uid').val() === auth.uid && newData.child('studentCode').val() === root.child('users/' + auth.uid + '/studentCode').val() && newData.child('classId').val() === root.child('users/' + auth.uid + '/classId').val() && newData.child('username').val() === root.child('users/' + auth.uid + '/username').val() && (!data.exists() || data.child('uid').val() === auth.uid || data.child('expiresAt').val() <= now))))",
+          ".validate": "newData.hasChildren(['uid','studentCode','username','classId','startedAt','expiresAt']) && newData.child('startedAt').isNumber() && newData.child('startedAt').val() <= now + 15000 && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() > now && newData.child('expiresAt').val() <= now + 1800000"
+        },
+        "count": {
+          ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+        },
+        "lastEventAt": {
+          ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+        },
+        "lastSeen": {
+          ".write": "(auth != null && root.child('admins/' + auth.uid).val() === true) || ((auth != null && root.child('devices/' + auth.uid + '/enabled').val() === true) && root.child('devices/' + auth.uid + '/binId').val() === $bin && data.parent().child('id').exists())"
+        },
+        "ip": {
+          ".write": "(auth != null && root.child('admins/' + auth.uid).val() === true) || ((auth != null && root.child('devices/' + auth.uid + '/enabled').val() === true) && root.child('devices/' + auth.uid + '/binId').val() === $bin && data.parent().child('id').exists())"
+        }
+      }
+    },
+    "events": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() === true",
+      ".indexOn": [
+        "status",
+        "binId",
+        "ts"
+      ],
+      "$txId": {
+        ".write": "(auth != null && root.child('admins/' + auth.uid).val() === true) || ((auth != null && root.child('devices/' + auth.uid + '/enabled').val() === true) && !data.exists() && newData.child('deviceUid').val() === auth.uid && newData.child('binId').val() === root.child('devices/' + auth.uid + '/binId').val() && newData.child('source').val() === 'esp32' && newData.child('status').val() === 'pending' && root.child('bins/' + newData.child('binId').val() + '/id').exists())",
+        ".validate": "newData.hasChildren(['txId','binId','type','status','ts','source']) && newData.child('txId').val() === $txId && newData.child('binId').isString() && newData.child('type').isString() && newData.child('ts').isNumber() && newData.child('ts').val() >= now - 60000 && newData.child('ts').val() <= now + 15000 && ((newData.child('source').val() === 'esp32' && newData.child('status').val() === 'pending') || (auth != null && root.child('admins/' + auth.uid).val() === true))"
+      }
+    },
+    "transactions": {
+      ".read": true,
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() === true",
+      ".indexOn": [
+        "ts",
+        "studentCode",
+        "weekKey"
+      ],
+      "$txId": {
+        ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+      }
+    },
+    "devices": {
+      ".read": "auth != null && root.child('admins/' + auth.uid).val() === true",
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() === true",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid"
+      }
+    }
+  }
+}

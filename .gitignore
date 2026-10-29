@@ -1,0 +1,10 @@
+node_modules/
+public/
+.cache/
+.emulator-data/
+*-debug.log
+*-debug.*.log
+__pycache__/
+.env
+.env.*
+!.env.example

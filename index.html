@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1FA35B">
+  <meta name="description" content="Thi đua bỏ rác đúng chỗ giữa các lớp: quét mã QR trên thùng rác thông minh, tích điểm cho lớp và theo dõi bảng xếp hạng theo thời gian thực.">
+  <title>Green School</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='19' fill='%231FA35B'/%3E%3Cpath d='M12 27c8 0 16-5 16-16-10 0-16 6-16 13v3Z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+  <div id="app"><div class="boot"><span class="boot-leaf"></span><p>Đang tải…</p></div></div>
+  <noscript>Trình duyệt cần bật JavaScript để dùng ứng dụng này.</noscript>
+
+  <!-- Lõi -->
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/core/util.js"></script>
+  <script src="assets/js/core/db-local.js"></script>
+  <script src="assets/js/core/db-firebase.js"></script>
+  <script src="assets/js/core/services.js"></script>
+  <script src="assets/js/core/seed.js"></script>
+  <script src="assets/js/core/router.js"></script>
+  <!-- Trang học sinh -->
+  <script src="assets/js/pages/home.js"></script>
+  <script src="assets/js/pages/auth.js"></script>
+  <script src="assets/js/pages/scan.js"></script>
+  <script src="assets/js/pages/me.js"></script>
+  <!-- Trang quản trị -->
+  <script src="assets/js/admin/dashboard.js"></script>
+  <script src="assets/js/admin/students.js"></script>
+  <script src="assets/js/admin/accounts.js"></script>
+  <script src="assets/js/admin/points.js"></script>
+  <script src="assets/js/admin/bins.js"></script>
+  <script src="assets/js/admin/settings.js"></script>
+  <!-- Khởi động -->
+  <script src="assets/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "Green School",
+  "short_name": "Green School",
+  "start_url": "./#/",
+  "display": "standalone",
+  "background_color": "#F3FAF2",
+  "theme_color": "#1FA35B",
+  "lang": "vi",
+  "icons": [
+    { "src": "assets/img/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

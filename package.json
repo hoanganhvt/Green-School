@@ -1,0 +1,12 @@
+{
+  "name": "green-school",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "emulators": "node scripts/emulators.cjs",
+    "test": "node --test tests/*.test.cjs",
+    "test:emulators": "node scripts/emulators.cjs test",
+    "seed:emulators": "node scripts/seed-emulators.cjs"
+  },
+  "devDependencies": { "firebase-tools": "15.34.0" }
+}
