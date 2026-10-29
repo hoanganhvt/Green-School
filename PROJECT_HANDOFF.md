@@ -178,6 +178,9 @@ ghi sự kiện.
 
 ## 5. Firmware chính và cầu nối USB
 
+Hướng dẫn chạy từng bước trên Windows (cài đặt, emulator, seed, nạp firmware,
+cổng COM và kiểm tra điểm): [README.md](README.md#hướng-dẫn-chạy-trên-laptop-windows).
+
 `hardware/Green-School/Green-School.ino` không có Wi-Fi, Firebase hay nhận lệnh phân loại Edge Impulse.
 Nó dùng 4 cảm biến siêu âm: hai cảm biến mở nắp và hai cảm biến đếm rác. Không
 được hiểu hai cảm biến đếm là tự nhận diện vật liệu. Quy ước tạm thời: ngăn/cảm
