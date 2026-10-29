@@ -1,164 +1,158 @@
 # Green School
 
-Web thi đua bỏ rác đúng chỗ giữa các lớp: học sinh quét QR mở phiên trên thùng,
-ESP32 ghi nhận lượt bỏ rác, hệ thống cộng điểm và cập nhật bảng xếp hạng realtime.
-Frontend HTML/CSS/JavaScript thuần, không cần build.
+Hệ thống thi đua bỏ rác đúng chỗ giữa các lớp: học sinh quét QR mở phiên trên
+thùng, thiết bị ghi nhận lượt bỏ rác, hệ thống xử lý điểm và bảng xếp hạng.
 
-**Trạng thái cloud hiện tại:** [DEPLOYMENT.md](DEPLOYMENT.md). Web đã deploy: https://smarttrashbin-98428.web.app/. Cloud Functions đang chờ bật Blaze.
+## Sử dụng bản đã deploy
 
-**Tài liệu đầy đủ cho agent tiếp theo:** [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md).
-Bao gồm mục tiêu, cấu trúc, hợp đồng dữ liệu, tài khoản mẫu, hướng dẫn demo,
-checklist test, giới hạn hiện tại và những phần chưa được xác minh.
+Web: **https://smarttrashbin-98428.web.app/**
 
-## Hướng dẫn chạy trên laptop (Windows)
+Firebase project: `smarttrashbin-98428`.
+Database: `https://smarttrashbin-98428-default-rtdb.asia-southeast1.firebasedatabase.app`.
 
-Firmware sử dụng là **[hardware/Green-School/Green-School.ino](hardware/Green-School/Green-School.ino)**.
-ESP32 điều khiển nắp và đếm rác; laptop nhận dữ liệu USB và gửi request tới
-Firebase local. Functions emulator xử lý cộng điểm.
+Mở web trực tiếp trên trình duyệt có kết nối Internet. Không cần khởi động server
+web trên laptop. Đăng nhập bằng tài khoản cloud đã được cấp.
 
-```text
-ESP32 -> USB Serial (GS_DROP) -> firebase_usb_bridge.ps1
-      -> Firebase Emulator -> Functions cộng điểm -> Web
-```
+1. Quản trị viên đăng nhập bằng tên `ADMIN` và mật khẩu đã thiết lập trên cloud.
+2. Kiểm tra danh sách lớp, học sinh và thùng rác; chuẩn bị dữ liệu thực tế bằng các chức năng quản trị tương ứng.
+3. Học sinh dùng tài khoản cloud của mình, quét QR trên thùng hoặc mở trang scan của thùng. Với `BIN-01`: https://smarttrashbin-98428.web.app/#/scan/BIN-01.
+4. Kiểm tra phiên đang hoạt động trước khi bỏ rác. Khi luồng thiết bị và xử lý điểm cloud đã tích hợp đầy đủ, kiểm tra kết quả trong lịch sử và bảng xếp hạng.
 
-Mở PowerShell tại thư mục dự án trước khi chạy các lệnh bên dưới:
+Theo [trạng thái triển khai đã ghi nhận](DEPLOYMENT.md), Hosting, Email/Password
+Auth và Realtime Database Rules đã deploy. Functions tự động cộng điểm còn chờ
+Blaze; chưa xác nhận luồng cộng điểm cloud hoàn chỉnh. Mật khẩu admin không lưu
+trong mã nguồn hoặc tài liệu.
+
+## Backend Firebase
+
+Backend xử lý điểm là Cloud Function `processBinEvent` trong `functions/index.js`.
+Hàm tự chạy khi có event mới tại `/events/{txId}` trong Realtime Database;
+không có lệnh `npm start` để bật backend trên laptop. Laptop chỉ cần chạy chương
+trình đọc USB/camera và gửi event khi chương trình đó đã được tích hợp cloud.
+
+Để kiểm tra backend đã sẵn sàng, vào Firebase Console của project
+`smarttrashbin-98428`, mở Functions và kiểm tra `processBinEvent` ở vùng
+`asia-southeast1`. Nếu chưa có hàm, hoàn tất điều kiện Blaze ghi trong
+[DEPLOYMENT.md](DEPLOYMENT.md), rồi triển khai từ PowerShell tại thư mục dự án:
 
 ```powershell
 Set-Location 'C:\Users\ADMIN\Downloads\Green School'
-```
-
-### 1. Chuẩn bị
-
-- Node.js 22 và npm; JDK 21 (đặt `JAVA_HOME` nếu launcher không tìm được Java).
-- Arduino IDE, gói board ESP32 và thư viện `ESP32Servo` nếu dùng thiết bị thật.
-- Cáp USB truyền dữ liệu và driver phù hợp với board để máy nhận cổng COM.
-
-Chạy một lần sau khi tải dự án, hoặc khi dependencies thay đổi:
-
-```powershell
 npm.cmd install
 npm.cmd --prefix functions install
+npx.cmd firebase login
+npx.cmd firebase deploy --only functions --project smarttrashbin-98428
 ```
 
-### 2. Khởi động Firebase local
+Đây là lệnh cập nhật backend trên cloud, chỉ thực hiện khi cần deploy. Khi deploy
+thành công, backend chạy trên Firebase, không cần giữ PowerShell mở. Xem Logs của
+`processBinEvent` trong Firebase Console khi cần kiểm tra lỗi xử lý event.
 
-Trong PowerShell thứ nhất:
+Việc deploy Functions chưa kết nối được USB/camera với cloud: chương trình trên
+laptop còn cần gửi event bằng tài khoản thiết bị được cấp quyền. Không gửi thử
+event bằng tài khoản admin để thay cho luồng thiết bị.
+
+## Kết nối phần cứng
+
+Rút nguồn trước khi đấu dây. Bảng dưới là GPIO đúng theo firmware hiện tại;
+đối chiếu ký hiệu GPIO trên board, không dùng số thứ tự chân vật lý.
+
+| Thiết bị | Chân tín hiệu trên thiết bị | GPIO ESP32 |
+| --- | --- | --- |
+| Siêu âm mở nắp 1 | TRIG / ECHO | 5 / 18 |
+| Siêu âm mở nắp 2 | TRIG / ECHO | 17 / 16 |
+| Siêu âm đếm rác 1 | TRIG / ECHO | 22 / 23 |
+| Siêu âm đếm rác 2 | TRIG / ECHO | 13 / 14 |
+| Servo nắp 1 | Signal | 19 |
+| Servo nắp 2 | Signal | 21 |
+| Module còi | Signal / IN | 27 |
+
+- Cấp nguồn cảm biến, servo và còi theo thông số của module thực tế; nối chung GND với ESP32. Không cấp nguồn servo từ chân GPIO.
+- Kiểm tra mức điện áp ECHO trước khi nối vào ESP32; dùng mạch chuyển mức/chia áp nếu tín hiệu vượt mức đầu vào cho phép của board.
+- Firmware giả định module còi kích mức LOW. Kiểm tra đúng loại module trước khi cấp nguồn.
+- Cắm ESP32 vào laptop bằng cáp USB truyền dữ liệu; xem cổng COM trong Arduino IDE hoặc Device Manager.
+- Camera dùng camera tích hợp hoặc USB của laptop; không nối camera laptop vào GPIO ESP32.
+
+Loại board, model cảm biến và nguồn servo chưa được ghi cụ thể trong dự án;
+cần đối chiếu linh kiện thực tế trước khi đấu nguồn.
+
+## Nạp và chạy firmware ESP32
+
+Firmware chính: **[hardware/Green-School/Green-School.ino](hardware/Green-School/Green-School.ino)**.
+
+Chuẩn bị Arduino IDE, gói board ESP32, thư viện `ESP32Servo` và cáp USB truyền dữ liệu.
+
+1. Mở file firmware trên bằng Arduino IDE; thư mục sketch đã khớp tên file.
+2. Chọn đúng loại board và cổng COM trong menu Tools.
+3. Verify, rồi Upload lên ESP32.
+4. Mở Serial Monitor ở **115200 baud** để kiểm tra hoạt động cảm biến.
+5. Khi bộ đếm tăng, firmware phát `GS_DROP 1 <số đếm>` hoặc `GS_DROP 2 <số đếm>`. Đóng Serial Monitor trước khi dùng chương trình khác đọc cùng cổng COM.
+
+Sau Upload, firmware tự chạy khi ESP32 được cấp nguồn; không cần chạy file `.ino`
+trên laptop. Khi cần khởi động lại, nhấn nút reset của board.
+
+Kiểm tra lần lượt từng ngăn: đưa vật trong khoảng mở nắp 10 cm, kiểm tra servo;
+đưa vật qua cảm biến đếm trong khoảng 6 cm, kiểm tra bộ đếm và còi. Đưa vật ra
+xa hơn 8 cm trước lượt đếm tiếp theo. Nắp đóng sau khoảng 2 giây không phát
+hiện vật; góc servo trong code là đóng 0°, mở 90°. Kiểm tra hành trình cơ khí
+trước khi gắn tải vào servo.
+
+Firmware điều khiển hai nắp, còi và bốn cảm biến siêu âm; chưa có Wi-Fi hoặc gửi
+request Firebase. Cảm biến đếm không tự nhận diện vật liệu. Quy ước ngăn 1 là
+`plastic`, ngăn 2 là `metal` cần khớp với cách lắp thực tế.
+
+## Laptop, camera và kết nối Firebase cloud
+
+### Kiểm tra laptop nhận dữ liệu ESP32
+
+Sau khi nạp firmware, đóng Serial Monitor. Mở Windows PowerShell, thay `COM5`
+bằng cổng thực tế và chạy đoạn sau để đọc dữ liệu USB:
 
 ```powershell
-npm.cmd run emulators
+$espPort = New-Object System.IO.Ports.SerialPort 'COM5', 115200, None, 8, One
+$espPort.ReadTimeout = 1000
+try {
+    $espPort.Open()
+    while ($true) {
+        try { Write-Host ($espPort.ReadLine().Trim()) }
+        catch [System.TimeoutException] { }
+    }
+} finally {
+    if ($espPort.IsOpen) { $espPort.Close() }
+    $espPort.Dispose()
+}
 ```
 
-Giữ cửa sổ này chạy. Launcher dùng project `demo-green-school`, chuẩn bị web vào
-`public/` và khởi động Auth, Database, Functions, Hosting emulators.
+Khi bỏ rác qua cảm biến đếm, cần thấy dòng như `GS_DROP 1 1` hoặc `GS_DROP 2 1`.
+Nhấn Ctrl+C để dừng và giải phóng cổng. Đoạn lệnh chỉ kiểm tra USB, chưa gửi
+request Firebase. Nếu không mở được cổng, đóng ứng dụng khác đang dùng COM;
+nếu không có dữ liệu đếm, kiểm tra chân cảm biến và ngưỡng trong firmware.
 
-Trong PowerShell thứ hai tại cùng thư mục dự án, chỉ seed lần đầu khi database còn rỗng:
+### Chương trình camera và gửi event
 
-```powershell
-npm.cmd run seed:emulators
+Luồng dự kiến:
+
+```text
+Camera laptop -> Python nhận diện -> ESP32 qua USB
+ESP32 xác nhận rác qua cảm biến -> laptop gửi event -> Firebase cloud -> xử lý điểm
 ```
 
-- Web: <http://127.0.0.1:5000/?firebase=emulator>
-- Emulator UI: <http://127.0.0.1:4000>
-- Admin: `admin` / `admin123`.
-- Học sinh: `hs10a1` / `123456`.
+Các phần hiện có và phần cần hoàn thiện:
 
-Nếu seed báo database không rỗng, giữ dữ liệu hiện có và bỏ qua bước seed.
-Các tài khoản mẫu trên chỉ dành cho local.
-
-### 3. Nạp firmware và kết nối USB
-
-1. Mở `hardware/Green-School/Green-School.ino` bằng Arduino IDE. Thư mục sketch đã khớp tên file.
-2. Chọn board ESP32 đúng loại và cổng COM của board trong menu Tools.
-3. Cài thư viện `ESP32Servo` nếu thiếu, rồi Verify và Upload.
-4. Có thể mở Serial Monitor ở **115200 baud** để kiểm tra. Khi bộ đếm tăng, firmware phát `GS_DROP 1 <số đếm>` hoặc `GS_DROP 2 <số đếm>`.
-5. Đóng Serial Monitor trước khi chạy bridge để giải phóng cổng COM.
-
-Chạy trong PowerShell thứ hai, thay `COM5` bằng cổng thực tế:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\hardware\firebase_usb_bridge.ps1 -Port COM5
-```
-
-Giữ bridge chạy. Mặc định dùng `BIN-01`, cảm biến đếm 1 tương ứng `plastic`,
-cảm biến đếm 2 tương ứng `metal`. Đây là quy ước ngăn chứa, cảm biến siêu âm
-không nhận diện vật liệu. Nếu lắp hai ngăn ngược nhau:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\hardware\firebase_usb_bridge.ps1 -Port COM5 -Sensor1Type metal -Sensor2Type plastic
-```
-
-Bridge dùng tài khoản thiết bị local do bước seed tạo và chỉ gửi tới emulator
-trên laptop; chưa hỗ trợ Firebase cloud. Không cần cấu hình Wi-Fi trong firmware.
-
-### 4. Mở phiên học sinh và thử bỏ rác
-
-1. Mở <http://127.0.0.1:5000/?firebase=emulator>, đăng nhập `hs10a1` / `123456`.
-2. Mở <http://127.0.0.1:5000/?firebase=emulator#/scan/BIN-01> để mở phiên cho thùng.
-3. Bỏ rác qua cảm biến đếm của ngăn tương ứng. Bridge cần hiện `Captured sensor ...`, rồi `Sent ...`.
-4. Kiểm tra lịch sử và điểm học sinh/lớp trên web. `Sent` chỉ xác nhận gửi event; kiểm tra trạng thái xử lý tại `/events` trong Database trên Emulator UI nếu điểm không tăng.
-5. Đợi hơn 3 giây giữa hai lượt; phiên mặc định hết hạn sau 3 phút, cần mở lại trang scan để tạo phiên khi đã hết hạn.
-
-Để kiểm tra web/backend khi chưa có ESP32, mở thêm PowerShell tại thư mục dự án
-và gửi lượt mô phỏng sau khi mở phiên học sinh:
-
-```powershell
-node scripts/simulate-bin.cjs BIN-01 plastic
-```
-
-Đóng trang admin vẫn xử lý được sự kiện nhờ Functions emulator.
-
-### 5. Dừng và chạy lại
-
-Nhấn Ctrl+C ở cửa sổ bridge trước, rồi Ctrl+C ở cửa sổ emulator và đợi export
-xong. Dữ liệu lưu tại `.emulator-data/`; lần bật sau launcher tự import, không
-cần seed lại. Hàng đợi chưa gửi của bridge chỉ nằm trong RAM và mất khi dừng.
-
-Lần đầu có thể cần Internet để tải emulator; web vẫn dùng CDN cho SDK, font,
-QR và Excel. Chạy local chưa đồng nghĩa hoạt động hoàn toàn offline.
-
-### Camera trên laptop
-
-`hardware/ei_bridge.py` hiện là script Edge Impulse tham khảo cho luồng firmware
-cũ đã xóa. Firmware chính chưa nhận nhãn phân loại qua Serial, và script Python
-chưa gửi event tới Firebase. **Chưa chạy script camera trong luồng hướng dẫn này**;
-cần tích hợp thêm trước khi dùng camera để phân loại. Python không bắt buộc cho
-luồng USB hiện tại.
-
-### Lỗi thường gặp
-
-| Hiện tượng | Cách kiểm tra |
+| Thành phần | Trạng thái |
 | --- | --- |
-| Không tìm thấy Java | Cài JDK 21 và đặt `JAVA_HOME` tới thư mục JDK, mở lại terminal. |
-| Không mở được COM / Access denied | Kiểm tra cổng trong Arduino IDE, cáp/driver; đóng Serial Monitor và chương trình khác đang giữ COM. |
-| Bridge không đăng nhập được | Kiểm tra emulator còn chạy, cổng Auth 9099 và đã seed tài khoản thiết bị local. |
-| Không thấy `Captured` | Kiểm tra firmware đã nạp, đúng COM, baud 115200 và cảm biến đếm thực sự tăng bộ đếm. |
-| Đã `Sent` nhưng không tăng điểm | Kiểm tra đang dùng URL có `firebase=emulator`, phiên BIN-01 còn hạn, Functions emulator còn chạy và trạng thái event có bị từ chối do cooldown. |
-| Cổng emulator bị chiếm | Dừng phiên emulator cũ; các cổng cấu hình là 4000, 5000, 5001, 9000, 9099. |
+| `hardware/Green-School/Green-School.ino` | Firmware chính, phát `GS_DROP`; chưa nhận nhãn phân loại từ camera. |
+| `hardware/ei_bridge.py` | Script camera Edge Impulse tham khảo; chưa tương thích firmware chính và chưa gửi event Firebase. |
+| `hardware/firebase_usb_bridge.ps1` | Chỉ hỗ trợ emulator, chưa gửi tới Firebase cloud; không dùng làm lệnh chạy bản đã deploy. |
+| Xử lý điểm cloud | Theo `DEPLOYMENT.md`, Functions còn chờ Blaze. |
 
-## Demo giao diện
+Hiện chưa có lệnh chạy hoàn chỉnh cho camera + ESP32 + Firebase cloud. Cần tích
+hợp nhận nhãn qua Serial vào firmware, xử lý xác nhận rác trong chương trình
+laptop và gửi HTTPS bằng tài khoản thiết bị cloud đã cấp quyền. Chỉ gửi lượt bỏ
+rác khi cảm biến xác nhận, không gửi ngay khi camera nhận diện.
 
-Không có query emulator và không cấu hình Firebase thật thì dùng dữ liệu demo
-localStorage. Có thể mở qua static server:
+## Tài liệu kỹ thuật
 
-```powershell
-npx.cmd --yes http-server . -p 8080
-```
+- [DEPLOYMENT.md](DEPLOYMENT.md): bản ghi triển khai và các phần cloud còn thiếu.
+- [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md): kiến trúc, hợp đồng dữ liệu và lịch sử kiểm thử; các phần thử nghiệm cũ không phải hướng dẫn vận hành bản cloud.
 
-Mở <http://127.0.0.1:8080/>. Tài khoản demo giống tài khoản web mẫu ở trên. Các
-nút bỏ nhựa/kim loại ở trang scan chỉ giả lập trong trình duyệt; demo này không
-kiểm tra Firebase Rules hoặc Cloud Functions.
-
-## Test
-
-```powershell
-npm.cmd test
-```
-
-Khi đã cài dependency, dừng emulator đang dùng trước khi chạy phiên tích hợp riêng:
-
-```powershell
-npm.cmd run test:emulators
-```
-
-Kết quả kiểm thử đã ghi nhận xem tại [DEPLOYMENT.md](DEPLOYMENT.md).
-Lượt cập nhật hướng dẫn này không chạy lại emulator, camera hoặc nạp/kiểm thử ESP32.
+Firmware, camera và luồng USB với thiết bị thật chưa được kiểm thử xác nhận.
