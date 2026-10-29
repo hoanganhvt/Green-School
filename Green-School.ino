@@ -253,7 +253,6 @@ void loop() {
   Serial.print(" cm | Dem rac 2: ");
   Serial.print(kcDem2);
 
-  //dumb ass nigga
   Serial.print(" cm | Tong so lan dem: ");
   Serial.println(demRac1 + demRac2);
 
