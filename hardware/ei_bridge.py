@@ -14,7 +14,9 @@ Chạy:
     python ei_bridge.py model.eim /dev/tty.usbserial-0001   (macOS)
     python ei_bridge.py model.eim COM5                      (Windows)
 
-Đây là code THAM KHẢO, các bạn chỉnh ngưỡng/nhãn cho đúng mô hình của mình.
+Đây là code THAM KHẢO cho luồng firmware cũ đã bị xóa.
+Firmware chính hardware/Green-School/Green-School.ino chưa nhận các nhãn phân loại qua Serial;
+script này chưa tích hợp với firmware chính và chưa gửi sự kiện lên Firebase.
 """
 import sys
 import time

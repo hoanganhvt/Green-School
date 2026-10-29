@@ -44,16 +44,16 @@ không có React/Vite và không có bước build frontend.
 | `functions/index.js`, `scoring.js` | Trigger tạo event và logic tính điểm trên server |
 | `scripts/` | Khởi động emulator, seed, REST local, mô phỏng thiết bị |
 | `tests/` | Unit test và kiểm thử tích hợp emulator |
-| `Green-School.ino` | **Firmware chính**: cảm biến siêu âm, hai servo, còi, lượt đếm qua Serial |
+| `hardware/Green-School/Green-School.ino` | **Firmware chính**: cảm biến siêu âm, hai servo, còi, lượt đếm qua Serial |
 | `hardware/firebase_usb_bridge.ps1` | Chuyển thông báo USB của firmware chính sang Firebase local |
-| `hardware/esp32_green_bin/`, `hardware/ei_bridge.py` | Mẫu cũ/tham khảo Wi-Fi và Edge Impulse; không phải firmware đang dùng |
+| `hardware/ei_bridge.py` | Script camera Edge Impulse tham khảo; chưa tích hợp với firmware chính `hardware/Green-School/Green-School.ino` |
 | `du-lieu-mau/` | Excel mẫu để thử import học sinh |
 
 Luồng Firebase:
 
 ```text
 Web học sinh -> Auth -> /bins/BIN-01/activeSession
-Green-School.ino -> Serial GS_DROP -> PowerShell USB bridge
+hardware/Green-School/Green-School.ino -> Serial GS_DROP -> PowerShell USB bridge
 USB bridge -> Auth thiết bị -> /events/{txId} (pending)
 Cloud Functions -> kiểm tra thiết bị/phiên/học sinh/cooldown
                -> transaction nguyên tử trên RTDB
@@ -178,7 +178,7 @@ ghi sự kiện.
 
 ## 5. Firmware chính và cầu nối USB
 
-`Green-School.ino` không có Wi-Fi, Firebase hay nhận lệnh phân loại Edge Impulse.
+`hardware/Green-School/Green-School.ino` không có Wi-Fi, Firebase hay nhận lệnh phân loại Edge Impulse.
 Nó dùng 4 cảm biến siêu âm: hai cảm biến mở nắp và hai cảm biến đếm rác. Không
 được hiểu hai cảm biến đếm là tự nhận diện vật liệu. Quy ước tạm thời: ngăn/cảm
 biến 1 là plastic, ngăn/cảm biến 2 là metal; cần xác nhận với cách lắp thực tế.
@@ -194,9 +194,7 @@ GS_DROP 2 1
 
 Cột 2 là cảm biến, cột 3 là số đếm từ lúc boot; các dòng debug khác bị bridge
 bỏ qua. Chưa biên dịch/nạp firmware hoặc xác nhận hiệu chuẩn phần cứng.
-Arduino IDE thường yêu cầu sketch folder trùng tên file: tạo/mở sketch
-`Green-School/Green-School.ino` với bản sao từ file gốc khi được phép nạp; file
-gốc ở root vẫn là nguồn chuẩn, không sửa nhầm mẫu trong `hardware/`.
+Firmware nguồn chuẩn nằm trong thư mục sketch `hardware/Green-School/` đã trùng tên file; mở trực tiếp file firmware bằng Arduino IDE khi cần nạp.
 
 Khi đã nạp firmware và có quyền dùng thiết bị, đóng Arduino Serial Monitor rồi
 chạy từ Windows PowerShell (không để hai chương trình cùng chiếm COM):
@@ -377,7 +375,7 @@ deploy chỉ vì tài liệu trước đó giới hạn lượt viết code.
 6. Nếu bản deploy cần nhận lượt từ ESP32, bổ sung cầu nối USB hỗ trợ Firebase
    cloud với HTTPS và Auth phù hợp. Bridge hiện tại cố định localhost nên deploy
    web/Functions không tự làm thiết bị gửi được lên cloud. Tiếp tục dùng firmware
-   chính `Green-School.ino`; không thay bằng mẫu Edge Impulse/Wi-Fi mà không kiểm
+   chính `hardware/Green-School/Green-School.ino`; không thay bằng mẫu Edge Impulse/Wi-Fi mà không kiểm
    tra phần cứng. Giữ chế độ local hoạt động khi bổ sung chế độ cloud.
 7. Kiểm tra danh sách file Hosting để tránh public code backend, dữ liệu học sinh,
    secrets và tài liệu nội bộ; deploy Rules, Functions và Hosting tới project ID

@@ -49,7 +49,7 @@
     const suffix = GS.USE_EMULATORS ? '?ns=demo-green-school-default-rtdb&auth=<ID_TOKEN>' : '?auth=<ID_TOKEN>';
     const ex = JSON.stringify({ txId: 'TX1729500000-BIN01-0007', binId: b.id, type: 'plastic', deviceUid: '<UID tài khoản thiết bị>', studentCode: '<lấy từ activeSession>', ts: { '.sv': 'timestamp' }, status: 'pending', source: 'esp32' }, null, 2);
     return `
-      <p class="muted">Firmware chính là <code>Green-School.ino</code>. Chạy <code>hardware/firebase_usb_bridge.ps1</code> để chuyển lượt đếm USB sang Firebase local. Các yêu cầu REST cần ID token của tài khoản thiết bị đã được cấp quyền trong <code>/devices</code>.</p>
+      <p class="muted">Firmware chính là <code>hardware/Green-School/Green-School.ino</code>. Chạy <code>hardware/firebase_usb_bridge.ps1</code> để chuyển lượt đếm USB sang Firebase local. Các yêu cầu REST cần ID token của tài khoản thiết bị đã được cấp quyền trong <code>/devices</code>.</p>
       <dl class="kv">
         <dt>BIN_ID</dt><dd><code>${U.esc(b.id)}</code></dd>
         <dt>DATABASE_URL</dt><dd><code>${U.esc(url)}</code></dd>

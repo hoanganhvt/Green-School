@@ -13,7 +13,7 @@ checklist test, giới hạn hiện tại và những phần chưa được xác
 Code đã được chuẩn bị cho local. Theo chỉ dẫn mới nhất, **agent tiếp theo đã đăng
 nhập Google và sẽ kiểm thử, cấu hình rồi deploy Firebase**. Xem mục 9 của tài liệu
 bàn giao; project cloud thật cần được xác định riêng với `demo-green-school`.
-Firmware chính là **`Green-School.ino`**, không phải mẫu cũ trong `hardware/`.
+Firmware sử dụng là **`hardware/Green-School/Green-School.ino`**. Firmware mẫu cũ trong `hardware/esp32_green_bin/` đã được xóa.
 
 ## Firebase local
 

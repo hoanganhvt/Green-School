@@ -7,7 +7,7 @@ param(
     [string]$DevicePassword = 'device-demo-123'
 )
 $ErrorActionPreference = 'Stop'
-# Local-only bridge for Green-School.ino. No Google login, token, or cloud URL.
+# Local-only bridge for hardware/Green-School/Green-School.ino. No Google login, token, or cloud URL.
 $databaseUrl = 'http://127.0.0.1:9000'
 $namespace = 'demo-green-school-default-rtdb'
 $serialPort = New-Object System.IO.Ports.SerialPort $Port, 115200, None, 8, One

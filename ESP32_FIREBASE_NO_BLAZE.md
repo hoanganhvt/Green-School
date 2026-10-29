@@ -16,7 +16,7 @@ Thông tin dự án:
 | Website | https://smarttrashbin-98428.web.app/ |
 | Database | `https://smarttrashbin-98428-default-rtdb.asia-southeast1.firebasedatabase.app` |
 | Tài khoản quản trị web | `ADMIN`, đăng nhập không phân biệt hoa thường |
-| Firmware chính | `Green-School.ino` |
+| Firmware chính | `hardware/Green-School/Green-School.ino` |
 
 Mật khẩu admin không được đưa vào firmware, tài liệu hoặc source public. ESP32 phải dùng tài khoản thiết bị riêng.
 
@@ -98,7 +98,7 @@ Thiết bị hợp lệ vẫn là nguồn tin cho việc cảm biến có phát 
 
 | Thành phần | Công việc |
 |---|---|
-| `Green-School.ino` | Wi-Fi, HTTPS/TLS, Auth/refresh, phiên, eventId, queue, retry, heartbeat, giao dịch tính điểm |
+| `hardware/Green-School/Green-School.ino` | Wi-Fi, HTTPS/TLS, Auth/refresh, phiên, eventId, queue, retry, heartbeat, giao dịch tính điểm |
 | `firebase/database.rules.json` | Quyền tối thiểu thiết bị, bảo toàn số điểm và lịch sử, chống trùng/giả mạo |
 | `assets/js/core/services.js` | Adapter dữ liệu điểm mới, thao tác điều chỉnh/hủy/reset nhất quán |
 | `assets/js/pages/home.js`, `me.js` | Ranking, tổng tuần, điểm cá nhân, lịch sử theo nguồn dữ liệu mới |
