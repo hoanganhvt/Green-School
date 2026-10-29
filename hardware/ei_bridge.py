@@ -7,7 +7,7 @@ gửi nhãn xuống ESP32 qua cổng Serial để ESP32 mở nắp, bật LED, x
 rác rơi vào thùng và gửi sự kiện lên Firebase.
 
 Cài đặt:
-    pip install edge_impulse_linux pyserial opencv-python
+    python -m pip install -r hardware/requirements-ei.txt  (từ thư mục gốc dự án)
     edge-impulse-linux-runner --download model.eim     (tải mô hình của nhóm)
 
 Chạy:

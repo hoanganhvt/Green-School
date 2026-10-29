@@ -1,0 +1,3 @@
+-r requirements.txt
+edge_impulse_linux
+opencv-python

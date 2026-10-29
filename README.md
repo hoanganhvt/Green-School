@@ -143,12 +143,13 @@ Các phần hiện có và phần cần hoàn thiện:
 | `hardware/Green-School/Green-School.ino` | Firmware chính, phát `GS_DROP`; chưa nhận nhãn phân loại từ camera. |
 | `hardware/ei_bridge.py` | Script camera Edge Impulse tham khảo; chưa tương thích firmware chính và chưa gửi event Firebase. |
 | `hardware/firebase_usb_bridge.ps1` | Chỉ hỗ trợ emulator, chưa gửi tới Firebase cloud; không dùng làm lệnh chạy bản đã deploy. |
+| `hardware/firebase_http_bridge.py` | Đọc `GS_DROP` từ USB, gửi HTTPS tới Firebase cloud bằng tài khoản thiết bị. Xem [cách chạy](hardware/README_HTTP_BRIDGE.md). |
 | Xử lý điểm cloud | Theo `DEPLOYMENT.md`, Functions còn chờ Blaze. |
 
-Hiện chưa có lệnh chạy hoàn chỉnh cho camera + ESP32 + Firebase cloud. Cần tích
-hợp nhận nhãn qua Serial vào firmware, xử lý xác nhận rác trong chương trình
-laptop và gửi HTTPS bằng tài khoản thiết bị cloud đã cấp quyền. Chỉ gửi lượt bỏ
-rác khi cảm biến xác nhận, không gửi ngay khi camera nhận diện.
+Script HTTP đã có luồng ESP32 xác nhận rác → laptop → Firebase cloud. Luồng camera
+và xử lý điểm cloud vẫn chưa hoàn chỉnh: cần tích hợp nhãn Serial vào firmware và
+triển khai backend tính điểm. Chỉ gửi lượt bỏ rác khi cảm biến xác nhận, không gửi
+ngay khi camera nhận diện. Không chạy hai chương trình cùng mở cổng COM của ESP32.
 
 ## Tài liệu kỹ thuật
 
