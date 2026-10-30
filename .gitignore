@@ -13,3 +13,5 @@ __pycache__/
 *firebase-adminsdk*.json
 
 secrets/
+hardware/models/*.onnx
+.venv/

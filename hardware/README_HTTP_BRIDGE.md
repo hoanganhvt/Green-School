@@ -1,104 +1,70 @@
-# Gửi lượt bỏ rác từ laptop lên Firebase
+﻿# USB bridge, camera và Firebase
 
-Bridge đọc `GS_DROP` từ ESP32 qua USB và gửi HTTPS tới Firebase cloud.
-Không cần tài khoản, email hoặc mật khẩu cho thùng rác. Học sinh và admin vẫn
-đăng nhập web như trước.
+Hướng dẫn setup đầy đủ: [README.md](../README.md). Web cloud, phiên QR và backend Node.js trên laptop được dùng chung cho hai chế độ.
 
-## Chuẩn bị
+## Chọn đúng firmware và chương trình
 
-1. Tạo thùng trong trang quản trị, ví dụ mã `BIN-01`.
-2. Sửa `hardware/bin_config.json` trên laptop, khớp mã thùng đã tạo:
+| Chế độ | Firmware `AI_CONTROL_ENABLED` | Chương trình giữ COM |
+| --- | --- | --- |
+| Camera AI | `1` (mặc định mới) | `hardware/camera_ai.py` |
+| Khoảng cách thủ công | `0`, cần upload lại | `hardware/firebase_http_bridge.py` hoặc bridge PowerShell cũ |
 
-   ```json
-   { "bin_id": "BIN-01" }
-   ```
-
-3. Nạp `hardware/Green-School/Green-School.ino` lên ESP32, kiểm tra cổng COM.
-4. Cài Python 3 và dependencies từ thư mục gốc dự án:
-
-   ```powershell
-   py -m pip install -r hardware/requirements.txt
-   ```
-
-Config được đọc theo vị trí script, không phụ thuộc thư mục PowerShell hiện tại.
-Mỗi laptop/thùng đặt `bin_id` tương ứng; không tự tạo ID từ cổng COM.
-
-## Chạy
-
-Đóng Arduino Serial Monitor và các chương trình khác đang giữ COM5, rồi chạy:
-
-```powershell
-py hardware/firebase_http_bridge.py --port COM5
-```
-
-Không truyền `--email`, không có lời nhắc mật khẩu. Có thể chọn config khác:
-
-```powershell
-py hardware/firebase_http_bridge.py --port COM5 --config hardware/bin_config.json
-```
-
-Mặc định cảm biến 1 là `plastic`, cảm biến 2 là `metal`. Nếu lắp ngược:
-
-```powershell
-py hardware/firebase_http_bridge.py --port COM5 --sensor1 metal --sensor2 plastic
-```
-
-Giữ cửa sổ mở; Ctrl+C để dừng. Script kiểm tra thùng đã tồn tại trước khi mở USB.
-Học sinh đăng nhập web, quét QR đúng thùng trước khi bỏ rác. Ví dụ:
-https://smarttrashbin-98428.web.app/#/scan/BIN-01.
-
-Trước khi bỏ rác, chạy backend trong PowerShell riêng tại thư mục gốc:
+Không chạy hai bridge, Arduino Serial Monitor hoặc `ei_bridge.py` trên cùng COM. Backend Node.js không giữ COM nên phải chạy song song trong cửa sổ khác.
 
 ```powershell
 npm.cmd run backend
+# Cửa sổ riêng, chọn MỘT lệnh phù hợp firmware:
+.\.venv\Scripts\python.exe hardware/camera_ai.py --port COM5 --camera 0 --fps 5
+.\.venv\Scripts\python.exe hardware/firebase_http_bridge.py --port COM5
 ```
 
-Backend cần file service account trong `secrets/` và `.env` trỏ đúng tên file.
-Xem [hướng dẫn đầy đủ trong README](../README.md): setup lần đầu, đấu dây/nạp
-firmware, chạy hai cửa sổ PowerShell, quét QR và kiểm tra điểm.
-Không cần Blaze. Giữ cả backend và bridge chạy; hai chương trình không tranh COM.
-`SENT` chỉ nghĩa là database đã nhận event; backend in `PROCESSED` khi đã cộng
-điểm hoặc `REJECTED` kèm lý do. Kết quả cuối cùng lưu trong `/events` và lịch sử.
+Config `hardware/bin_config.json` chứa `bin_id` trùng thùng/QR đã tạo trên web, được đọc theo vị trí script. Có thể dùng `--config <path>`. Mapping mặc định sensor 1 = plastic, 2 = metal; dùng `--sensor1 metal --sensor2 plastic` ở chương trình đã chọn nếu lắp ngược. Camera yêu cầu hai mapping khác nhau.
 
-## Rules và giới hạn
+Học sinh đăng nhập web và quét QR trước khi bỏ rác, ví dụ https://smarttrashbin-98428.web.app/#/scan/BIN-01. Bridge không hỏi email/mật khẩu và không dùng service account. Chỉ backend dùng khóa quản trị trong `.env`/`secrets/`.
 
-Rules và web mới đã deploy ngày 29/10/2026 theo phê duyệt dùng ID thùng không
-đăng nhập. Cộng điểm do backend laptop xử lý, không dùng Cloud Functions.
+## Giao thức AI version 1
 
-Rules trong `firebase/database.rules.json` đã được áp dụng. Backend nằm trong
-`backend/`, chạy trên laptop; không deploy backend lên Firebase. Nếu cần cập nhật
-Rules trong lần sau, dùng:
+115200 baud, ASCII mỗi dòng kết thúc newline. Request ID là 32 ký tự hex thường, sensor chỉ 1/2. Máy tính chỉ ARM sau khi nhận READY.
+
+| Chiều | Message | Ý nghĩa |
+| --- | --- | --- |
+| ESP32 -> PC | `GS_AI_BOOT 1` | Khởi động/reset, hủy pending cũ ở PC |
+| PC -> ESP32 | `GS_AI_HELLO 1` | Bắt tay; thu hồi quyền cũ nếu controller reconnect |
+| ESP32 -> PC | `GS_AI_READY 1` | Sẵn sàng, nắp không mở và cảm biến đếm không đang giữ vật |
+| ESP32 -> PC | `GS_AI_MANUAL 1` | Firmware thủ công, camera phải dừng |
+| PC -> ESP32 | `GS_AI_PING` | Mỗi 1 giây |
+| PC -> ESP32 | `GS_AI_ARM <id> <sensor>` | Quyền mở đúng ngăn theo khoảng cách trong 5 giây |
+| ESP32 -> PC | `GS_AI_ACK <id> <sensor>` | Nhận quyền, chưa phải xác nhận rác |
+| ESP32 -> PC | `GS_AI_DROP <id> <sensor> <counter>` | Cạnh rác mới, đúng ngăn, sau một chu kỳ đã mở nắp |
+| PC -> ESP32 | `GS_AI_CANCEL <id>` | Thu hồi quyền mở/gia hạn lượt mới |
+| ESP32 -> PC | `GS_AI_DONE <id> <reason>` | Quyền kết thúc, đã ra lệnh đóng hai nắp và cảm biến đếm trống; reason drop/timeout/cancel/link_lost |
+
+Mất ping > 3 giây thu hồi quyền, không tự chuyển sang thủ công. ARM trùng không kéo dài deadline; request khác khi bận bị bỏ. Python không retry mở khi mất ACK, mà hủy và handshake lại. Quá 15 giây chưa READY sẽ dừng và báo kiểm tra firmware/cảm biến.
+
+ESP32 vẫn đọc bốn cảm biến, giữ ngưỡng 10/6/8 cm, timer đóng 2 giây, bộ đếm và còi 200 ms. Khi nắp đã mở, vật còn gần tiếp tục giữ mở để không đóng ngay khi timeout/cancel. Echo lỗi không chứng minh đường trống, không nhả latch đếm và không ép đóng nắp. Kiểm tra cảm biến nếu chờ DONE lâu.
+
+Cả AI/thủ công vẫn in `GS_DROP <sensor> <counter>` và log khoảng cách. **Python AI bỏ qua GS_DROP**; chỉ AI_DROP đúng ID/ngăn, ACK, thời hạn và chưa xử lý mới tạo event. Firmware thủ công dùng GS_DROP qua bridge cũ. ACK/DONE không phải phản hồi vị trí servo cơ khí.
+
+## Gửi event và backend
+
+`FirebaseBridge` trong `firebase_http_bridge.py` được camera import lại, không mở COM lần hai. `send_drop(sensor, captured_ms, stop=None, expected_session=None)` giữ tương thích caller cũ; camera truyền snapshot phiên gồm uid/studentCode/username/startedAt. Gia hạn expiresAt vẫn được chấp nhận, đổi người/phiên thì không gửi sang chủ mới.
+
+Timestamp là lúc PC nhận xác nhận USB. Payload giữ `source: esp32`, `status: pending`, loại rác mapping đúng sensor và thông tin học sinh. Không gửi confidence, ảnh hoặc request ID AI vào Rules. Sender retry giữ nguyên txId, timestamp và học sinh, kiểm tra event đã tồn tại sau mất phản hồi PUT và không ghi đè event đã processed.
+
+`SENT` chỉ xác nhận database nhận event, không phải đã cộng điểm. Backend kiểm tra lại phiên, user, rule, timestamp và cooldown; `PROCESSED` mới xác nhận cộng điểm, `REJECTED` có reason. Web theo dõi kết quả realtime; backend không cần trang admin mở.
+
+Heartbeat 30 giây cập nhật lastSeen và `ip: python-usb-bridge`. Web xem thùng online trong khoảng 90 giây từ lastSeen, không đo sức khỏe camera/servo. Trong AI, monitor phiên/settings độc lập sender, dữ liệu quá 2,5 giây không được dùng cấp quyền mới. Không đọc được phiên/settings thì dừng cấp quyền.
+
+Queue giới hạn 100 lượt trong RAM, TTL gửi 30 giây. Mất tiến trình có thể mất lượt chưa gửi; backend từ chối event cũ/phiên hết hạn. Không tự replay bằng txId mới.
+
+## Quyền và triển khai
+
+Luồng camera không yêu cầu đổi database Rules, loại source hoặc deploy web. Bản Rules hiện tại chỉ cho bridge tạo event pending đúng schema/thùng/phiên/loại/timestamp và heartbeat; không cho ghi điểm/phiên hoặc sửa event cũ. Khóa Admin SDK chỉ dùng ở backend tin cậy.
+
+ID thùng không phải xác thực: người biết bin/phiên vẫn có thể giả gửi event/heartbeat. Camera không giải quyết hạn chế xác thực đó. HTTP 401/403 cần kiểm tra Rules, bin ID, phiên, mapping và đồng hồ laptop, không đăng nhập tài khoản thùng.
 
 ```powershell
-npx.cmd firebase deploy --only database --project smarttrashbin-98428
-```
-
-Rules chỉ cho tạo event mới đúng schema, loại rác đã cấu hình, thùng tồn tại,
-khớp phiên học sinh còn hiệu lực và timestamp hợp lệ. Request không được sửa/xóa
-event cũ, sửa điểm hoặc thay đổi phiên. Heartbeat chỉ cập nhật `lastSeen` và `ip`
-của thùng tồn tại. Đọc từng event theo ID phục vụ xác nhận retry; không cho liệt kê
-cả danh sách event khi chưa đăng nhập.
-
-**ID thùng không phải bí mật hay bằng chứng xác thực. Ai biết ID và dữ liệu phiên
-cũng có thể giả gửi event hoặc heartbeat.** Kiểm tra phiên và cooldown chỉ giới
-hạn event hợp lệ, không chứng minh request đến từ phần cứng thật.
-
-HTTP 401/403: kiểm tra đã deploy Rules mới, đúng mã thùng, phiên còn hạn và
-mapping vật liệu có trong cấu hình điểm. Không cần xử lý tài khoản thiết bị nữa.
-
-## Camera và độ tin cậy
-
-Firmware chính chưa nhận nhãn camera từ `ei_bridge.py`. Chỉ một chương trình
-được mở cổng COM. Khi tích hợp camera, có thể import `FirebaseBridge(bin_id)`,
-gọi `check_bin()` một lần và `send_drop(sensor, captured_ms)` sau mỗi `GS_DROP`.
-`captured_ms` là thời điểm nhận USB: `int(time.time() * 1000)`.
-
-Retry giữ nguyên ID và timestamp, kiểm tra event đã tồn tại khi mất phản hồi,
-không ghi đè event đã xử lý. Queue trong RAM tối đa 100 lượt, hết hạn sau 30 giây;
-tắt chương trình/mất điện có thể mất lượt chưa gửi. Chỉ gửi sau cảm biến xác nhận.
-
-Kiểm thử không cần board:
-
-```powershell
-py -m unittest discover -s tests -p test_firebase_http_bridge.py
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
+npm.cmd test
+npm.cmd run test:emulators
 ```

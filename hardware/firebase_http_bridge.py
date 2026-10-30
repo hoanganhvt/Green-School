@@ -51,6 +51,22 @@ def error_message(error):
     return type(error).__name__
 
 
+def valid_session(session, captured_ms, now_ms=None):
+    now_ms = time.time() * 1000 if now_ms is None else now_ms
+    return (isinstance(session, dict) and bool(session.get("studentCode"))
+            and bool(session.get("username"))
+            and isinstance(session.get("startedAt"), (int, float))
+            and isinstance(session.get("expiresAt"), (int, float))
+            and session["startedAt"] <= captured_ms < session["expiresAt"]
+            and session["expiresAt"] > now_ms)
+
+
+def same_session(current, expected):
+    return (isinstance(current, dict) and isinstance(expected, dict)
+            and all(current.get(k) == expected.get(k)
+                    for k in ("uid", "studentCode", "username", "startedAt")))
+
+
 class FirebaseBridge:
     def __init__(self, bin_id, sensor1="plastic", sensor2="metal"):
         if not isinstance(bin_id, str) or not re.fullmatch(r"[A-Z0-9_-]{1,128}", bin_id):
@@ -71,7 +87,7 @@ class FirebaseBridge:
             "lastSeen": {".sv": "timestamp"}, "ip": "python-usb-bridge",
         })
 
-    def send_drop(self, sensor, captured_ms, stop=None):
+    def send_drop(self, sensor, captured_ms, stop=None, expected_session=None):
         """Send one confirmed drop. Retry with the SAME ID and timestamp.
 
         shortcut: RAM queue only; unsent drops are lost when this process stops.
@@ -86,11 +102,9 @@ class FirebaseBridge:
             try:
                 if event is None:
                     session = self.db("GET", f"bins/{self.bin_id}/activeSession")
-                    if (not session or not session.get("studentCode") or not session.get("username")
-                            or not isinstance(session.get("startedAt"), (int, float))
-                            or not isinstance(session.get("expiresAt"), (int, float))
-                            or not session["startedAt"] <= captured_ms < session["expiresAt"]
-                            or session["expiresAt"] <= time.time() * 1000):
+                    if (not valid_session(session, captured_ms)
+                            or (expected_session is not None
+                                and not same_session(session, expected_session))):
                         print("SKIPPED: no valid student session at drop time. Scan QR first.", flush=True)
                         return False
                     event = {

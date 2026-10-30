@@ -97,6 +97,20 @@ class BridgeTests(unittest.TestCase):
             self.assertFalse(self.bridge.send_drop(1, self.now - 31000))
         db.assert_not_called()
 
+    def test_camera_snapshot_rejects_changed_session_even_for_same_student(self):
+        expected = dict(self.session, uid="u1")
+        changed = dict(expected, startedAt=expected["startedAt"] + 1)
+        with patch.object(self.bridge, "db", return_value=changed) as db:
+            self.assertFalse(self.bridge.send_drop(1, self.now, expected_session=expected))
+        self.assertEqual(db.call_count, 1)
+
+    def test_camera_snapshot_allows_expiry_extension_and_preserves_source(self):
+        expected = dict(self.session, uid="u1")
+        extended = dict(expected, expiresAt=expected["expiresAt"] + 1000)
+        with patch.object(self.bridge, "db", side_effect=[extended, {}]) as db:
+            self.assertTrue(self.bridge.send_drop(1, self.now, expected_session=expected))
+        self.assertEqual(db.call_args.args[2]["source"], "esp32")
+
     def test_missing_or_mismatched_bin_is_rejected(self):
         for data in (None, {"id": "BIN-02"}):
             with patch.object(self.bridge, "db", return_value=data):

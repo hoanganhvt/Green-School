@@ -1,5 +1,12 @@
 # SMARTTRASHBIN — 29/10/2026
 
+> Update 30/10/2026: local camera integration is implemented in `hardware/camera_ai.py`
+> with pinned WasteWise ONNX and firmware AI gating. The four distance sensors,
+> counters, buzzer and scoring contract remain. New firmware defaults to AI;
+> set `AI_CONTROL_ENABLED=0` and re-upload for the original distance-only bridge.
+> See README for the current setup. This update has not deployed Hosting/Rules,
+> uploaded a board or verified a physical drop. Notes below describe the prior release.
+
 Web: https://smarttrashbin-98428.web.app/
 Project: `smarttrashbin-98428`.
 Database: `https://smarttrashbin-98428-default-rtdb.asia-southeast1.firebasedatabase.app`.
@@ -67,6 +74,7 @@ run the USB bridge and scan the QR before dropping rubbish. Keep both windows
 open. Closing the web admin page does not stop scoring; stopping the laptop
 backend does. Firmware/camera/USB on real hardware remain untested.
 
-Python bridge tests were updated earlier but were not run in the tool environment
-because it has no Python runtime. Camera-to-firmware classification remains a
-separate unfinished integration.
+At the prior release, Python bridge tests had not been run in the tool environment.
+The camera update now adds and runs Python tests, a real ONNX inference smoke test,
+host firmware tests for AI/manual modes, and the existing Node/Firebase emulator checks.
+Physical camera/ESP32 validation is still required; use README for the current flow.
