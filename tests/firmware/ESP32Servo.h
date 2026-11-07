@@ -8,6 +8,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
+#include <vector>
 #undef assert
 #define assert(condition) do { if (!(condition)) { std::cerr << "Check failed at line " << __LINE__ << ": " << #condition << "\n"; std::exit(1); } } while (0)
 #define HIGH 1
@@ -26,9 +27,12 @@ inline unsigned long pulseIn(int pin, int, unsigned long) { return echoes[pin]; 
 class Servo {
 public:
   int angle = -1;
-  void setPeriodHertz(int) {}
-  void attach(int, int, int) {}
+  int pin = -1, minUs = 0, maxUs = 0, periodHertz = 0;
+  std::vector<int> pulses;
+  void setPeriodHertz(int value) { periodHertz = value; }
+  void attach(int value, int minimum, int maximum) { pin = value; minUs = minimum; maxUs = maximum; }
   void write(int value) { angle = value; }
+  void writeMicroseconds(int value) { pulses.push_back(value); }
 };
 class FakeSerial {
 public:

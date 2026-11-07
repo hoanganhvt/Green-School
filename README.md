@@ -1,149 +1,230 @@
-﻿# Green School — setup và vận hành
+﻿# Green School — hướng dẫn chạy
 
-Web Firebase: **https://smarttrashbin-98428.web.app/**
-Firebase project: `smarttrashbin-98428`. Hướng dẫn cập nhật 30/10/2026.
+Cập nhật: **07/11/2026**. Các lệnh bên dưới dùng **PowerShell trên Windows**, chạy tại thư mục project.
 
-Hệ thống có hai chế độ: **camera AI** chọn đúng ngăn rồi cảm biến khoảng cách mở nắp; hoặc **thủ công** mở nắp theo khoảng cách như trước. Cả hai giữ cảm biến đếm rác, còi và backend cộng điểm. Chế độ mặc định của firmware mới là AI; phải nạp firmware tương ứng trước khi chọn chương trình chạy trên laptop.
+## Partner vừa clone repo: chạy nhanh
 
-## 1. Toàn bộ flow
+Mở terminal tại thư mục vừa clone. Máy cần Node.js 22.9+, Python 3.12 có lệnh `py` và g++ C++17 trong PATH. Các lệnh `setup:*` bên dưới dành cho Windows.
 
-```text
-Web học sinh -> Firebase Auth -> quét QR -> bins/<binId>/activeSession
+**Chưa có phần cứng, chạy mô phỏng ngay:**
 
-Camera trên laptop -> WasteWise ONNX -> phiên hợp lệ + nhãn ổn định
-                                      -> USB cấp quyền đúng ngăn
-ESP32: được cấp quyền + vật gần ≤ 10 cm -> servo mở nắp
-ESP32: cảm biến đếm phát hiện rác ≤ 6 cm -> USB xác nhận lượt
-Python trên laptop -> Firebase events/<txId> (pending)
-Backend Node.js trên laptop -> kiểm tra + cộng điểm atomically
-Firebase -> web cập nhật điểm, lịch sử, lớp và bảng xếp hạng realtime
+```powershell
+npm.cmd run setup:sim
+npm.cmd run simulate:esp
 ```
 
-- **Firebase Hosting** phục vụ web, **Authentication** đăng nhập, **Realtime Database/Rules** lưu và kiểm tra dữ liệu. AI và backend Node.js chạy trên laptop, không chạy trong Hosting.
-- Học sinh dùng web để đăng nhập, quét QR, gia hạn/kết thúc phiên và xem điểm. Admin quản lý lớp/học sinh/tài khoản, thùng/QR, quy tắc điểm và thống kê.
-- ESP32 không chạy AI, không dùng Wi-Fi và không trực tiếp gửi Firebase. ESP32 tiếp tục đọc bốn cảm biến, điều khiển servo/còi và báo USB.
-- Không cần Blaze hoặc Cloud Functions cho kiến trúc này. Laptop cần Internet, backend và chương trình camera/bridge phải cùng chạy.
-- Đóng trang admin không dừng cộng điểm. Tắt backend thì pending chưa được xử lý, dù web cloud vẫn mở được.
+**Muốn chạy camera/model và backend:**
 
-| Thành phần | File chính |
-| --- | --- |
-| Web nguồn | `index.html`, `assets/` |
-| Firmware | `hardware/Green-School/Green-School.ino` |
-| Camera AI + USB | `hardware/camera_ai.py` |
-| Tải model đã ghim phiên bản | `hardware/download_camera_model.py` |
-| Bridge thủ công / sender dùng chung | `hardware/firebase_http_bridge.py` |
-| ID thùng | `hardware/bin_config.json` |
-| Backend cộng điểm | `backend/index.cjs`, `worker.cjs`, `scoring.cjs` |
-| Cấu hình/quyền Firebase | `assets/js/config.js`, `firebase/database.rules.json` |
+```powershell
+npm.cmd ci
+npm.cmd run setup:camera
+```
 
-## 2. Phần mềm cần cài một lần
+`setup:camera` tạo `.venv`, cài dependency Python và kiểm tra checksum model có sẵn trong repo; chỉ tải khi thiếu file. Sau đó làm mục 5 để cấu hình khóa và chạy hai cửa sổ backend/camera. Kiểm thử Firebase local ở mục 4 cần thêm JDK21.
 
-Windows: Node.js **22.9+**, Python **3.12 64-bit** (đã kiểm thử), Arduino IDE, ESP32 board package, thư viện **ESP32Servo**, driver USB phù hợp và webcam nối máy tính.
+Repo giữ source, model ONNX, cấu hình Firebase web, `.env.example`, requirements và lockfile. Dependency, môi trường Python, cache, backup và `secrets/` được bỏ qua vì có thể tạo lại hoặc chứa thông tin riêng. Khóa backend và mật khẩu tài khoản cloud cần chủ project chia sẻ riêng; các link đến `secrets/` sẽ không có file trên bản clone mới. Muốn thử hoàn toàn local thì dùng tài khoản emulator ở mục 4, không cần khóa cloud.
 
-Firmware đã compile cho **ESP32 Dev Module** (`esp32:esp32:esp32`) với **ESP32 core 3.3.12** và **ESP32Servo 3.2.1**. Board vật lý chưa kết nối khi kiểm thử; chọn profile phù hợp board thực tế trước Upload, không suy ra model board từ kết quả compile này.
+## Thư mục chạy lệnh
 
-Nếu `py` báo `No installed Python found`, cần cài Python thật, không chỉ Python Launcher. Nếu máy dùng lệnh `python` thay vì `py -3.12`, thay lệnh tạo venv tương ứng. Sau khi tạo venv, dùng đúng executable trong `.venv` để tránh cài nhầm môi trường.
+```powershell
+cd "C:\Users\ADMIN\Downloads\Green School"
+```
 
-Mở PowerShell tại thư mục project:
+## 1. Chọn cách chạy
+
+| Bạn muốn làm gì? | Chạy theo mục | Cần chuẩn bị |
+| --- | --- | --- |
+| Chưa có ESP32, muốn kiểm tra servo và luồng điều khiển | [Mô phỏng ESP32](#3-mô-phỏng-esp32-không-cần-phần-cứng) | Node.js, Python, g++ |
+| Chưa có ESP32, muốn kiểm tra cả đăng nhập và cộng điểm | [Kiểm thử Firebase local](#4-kiểm-thử-đăng-nhập-và-cộng-điểm-trên-firebase-local) | Thêm JDK 21 và dependency Node |
+| Có ESP32, muốn camera nhận diện và mở nắp | [Chạy AI với phần cứng thật](#5-chạy-ai-với-phần-cứng-thật) | Webcam, ESP32, cảm biến/servo, Internet, khóa backend |
+| Có ESP32, chỉ muốn đếm rác, mở nắp bằng tay | [Chế độ thủ công](#6-chạy-thủ-công-không-ai) | ESP32, cảm biến, Internet, khóa backend |
+
+**Hiện chưa có phần cứng: bắt đầu ở mục 2 → 3 → 4.** Mô phỏng dùng nhãn rác và khoảng cách tổng hợp; không cần mở camera hay chọn cổng COM.
+
+## 2. Chuẩn bị môi trường
+
+### Python và Node.js
+
+Cần Node.js **22.9 trở lên**, Python **3.12 64-bit** đã được kiểm thử với project.
 
 ```powershell
 node --version
 npm.cmd --version
 py -3.12 --version
-npm.cmd ci
+```
+
+Tạo môi trường Python một lần nếu chưa có `.venv`:
+
+```powershell
 py -3.12 -m venv .venv
+```
+
+Kiểm tra môi trường đang dùng:
+
+```powershell
+.\.venv\Scripts\python.exe --version
+```
+
+Không cần activate `.venv`. Nếu máy không có lệnh `py` nhưng có Python, dùng executable Python thực tế để tạo môi trường, ví dụ `python -m venv .venv`.
+
+### Chỉ mô phỏng ESP32
+
+Cần g++ hỗ trợ C++17 và có trong PATH:
+
+```powershell
+g++ --version
+```
+
+Mô phỏng ở mục 3 chỉ dùng thư viện chuẩn Python; không cần cài model, OpenCV hay Firebase dependency. `npm.cmd run simulate:esp` có thể chạy trước `npm.cmd ci`.
+
+### Kiểm thử Firebase local hoặc chạy backend
+
+Cài dependency Node một lần:
+
+```powershell
+npm.cmd ci
+```
+
+Kiểm thử Firebase local cần thêm **JDK 21**:
+
+```powershell
+java -version
+```
+
+### Chạy camera hoặc toàn bộ test Python
+
+```powershell
 .\.venv\Scripts\python.exe -m pip install -r hardware/requirements-camera.txt
 ```
 
-Không cần activate venv hoặc đổi PowerShell execution policy. Không cài `opencv-python-headless` chung với `opencv-python` trong venv này vì ứng dụng cần cửa sổ preview. Dependency model dùng CPU, không cần CUDA/GPU.
+Chỉ dùng bridge thủ công thì cài `hardware/requirements.txt`. Không cài `opencv-python-headless` chung với OpenCV hiện tại vì camera cần cửa sổ preview. Không cần cài lại dependency mỗi lần chạy.
 
-Chỉ chạy thủ công, không camera: có thể chỉ cài `hardware/requirements.txt` thay vì requirements-camera. Không chạy `npm install`/cài Python packages mỗi lần bật hệ thống.
+## 3. Mô phỏng ESP32 không cần phần cứng
 
-## 3. Chuẩn bị Firebase và khóa backend
+Chạy:
 
-Với project hiện tại, cấu hình web đã nằm trong `assets/js/config.js`, database URL có sẵn trong backend và bridge. Không cần tạo lại project, tài khoản hoặc Rules mỗi lần chạy. Nếu dùng một Firebase project khác, phải cập nhật đồng bộ ba nơi đó và Hosting/site config; đổi mỗi bin ID không đổi Firebase project.
+```powershell
+npm.cmd run simulate:esp
+```
 
-Backend cần service account đúng project, còn camera/bridge không dùng khóa quản trị hoặc tài khoản thiết bị:
+Kết quả thành công:
 
-1. Mở [Firebase Console → Service accounts](https://console.firebase.google.com/project/smarttrashbin-98428/settings/serviceaccounts/adminsdk).
-2. Nếu đã có `.env`/khóa chạy được, giữ nguyên. Nếu chưa có, Generate new private key và lưu JSON trong `secrets/`.
-3. Sao chép `.env.example` thành `.env` nếu chưa tồn tại:
+```text
+PASS plastic: ACK -> 1800 us -> DROP -> 1200 us; event plastic
+PASS metal: ACK -> 1800 us -> DROP -> 1200 us; event metal
+PASS link timeout: PC leaves READY and can handshake again
+PASS: no hardware, no camera/model inference, no production writes
+```
 
-   ```powershell
-   if (!(Test-Path .env)) { Copy-Item .env.example .env }
-   ```
+Lệnh compile và chạy **chính firmware trong repo** bằng phần cứng giả lập. Nó kiểm tra mở đúng ngăn, giữ ngăn còn lại đóng, đếm một vật một lần, đóng nắp khi trống và bắt tay lại sau khi mất ping.
 
-4. Đặt đúng đường dẫn/tên file thực tế:
+Đây là mô phỏng tự động trong terminal, không mở giao diện thùng ảo và không ghi điểm lên website thật. Muốn kiểm tra cả Firebase và cộng điểm, chạy tiếp mục 4.
 
-   ```dotenv
-   GOOGLE_APPLICATION_CREDENTIALS=./secrets/firebase-service-account.json
-   ```
+Nếu Python nằm ở vị trí khác, có thể chỉ định executable cho simulator và test tích hợp trong cửa sổ hiện tại:
 
-Khóa chỉ nằm trên laptop tin cậy, không đưa vào Git, `assets/`, `public/`, model hay firmware. `firebase login` không thay thế service account cho backend. Không cần chia sẻ nội dung khóa để setup.
+```powershell
+$env:GS_PYTHON = "C:\duong-dan-thuc-te\python.exe"
+npm.cmd run simulate:esp
+```
 
-Nếu dựng Firebase mới, bật Email/Password Authentication, tạo Realtime Database, cấu hình Web App rồi áp dụng Rules tương ứng. Xem [DEPLOYMENT.md](DEPLOYMENT.md). Bản camera không yêu cầu đổi schema/Rules hoặc deploy web mới; không nhầm setup local với deploy cloud.
+## 4. Kiểm thử đăng nhập và cộng điểm trên Firebase local
 
-## 4. Chuẩn bị học sinh, thùng và QR trên web
+### Kiểm thử toàn bộ luồng tự động
 
-1. Đăng nhập admin bằng tài khoản `ADMIN` và mật khẩu đã thiết lập trong Firebase Auth.
-2. Kiểm tra lớp, học sinh và tài khoản cloud đang hoạt động, gắn đúng lớp.
-3. Vào **Thùng rác & QR**, tạo/chọn thùng, ví dụ `BIN-01`, in/dán QR tương ứng.
-4. Sửa `hardware/bin_config.json` để khớp chính xác:
+Đóng emulator đang chạy trước, rồi chạy:
 
-   ```json
-   { "bin_id": "BIN-01" }
-   ```
+```powershell
+npm.cmd run test:emulators
+```
 
-QR, thùng trong Firebase và config laptop phải cùng ID; không tự sinh ID từ COM. Đổi config thì khởi động lại chương trình camera/bridge. Bridge kiểm tra thùng tồn tại, không tự tạo thùng hoặc hỏi mật khẩu thiết bị.
+Lệnh tự bật Auth, Database và Hosting emulator cho project **`demo-green-school`**, tạo dữ liệu kiểm thử, chạy backend trong tiến trình test rồi tắt emulator. Không cần khóa service account hoặc chạy `npm.cmd run backend` riêng.
 
-Camera QR của web và camera phân loại của Python khác vai trò: nên quét QR bằng điện thoại, Python dùng webcam trên laptop. Nếu dùng cùng webcam cho trình duyệt và Python, dừng/giải phóng camera trên web trước khi mở chương trình Python.
+Test kiểm tra đăng nhập, tạo phiên học sinh, Python điều khiển firmware mô phỏng, event đi qua Database Rules, cộng **2 điểm nhựa / 3 điểm kim loại** và xử lý lại không cộng trùng. Thành công khi hiện test pass và `Script exited successfully (code 0)`.
 
-## 5. Đấu nối và chức năng phần cứng được giữ lại
+Dữ liệu này nằm trong emulator, không xuất hiện trên `smarttrashbin-98428.web.app`. Lần đầu emulator có thể cần Internet để tải thành phần chạy. Test tích hợp cần Python và g++ ở mục 2.
 
-Rút nguồn trước khi đấu dây. Dùng số GPIO, không phải số thứ tự chân vật lý.
+### Muốn mở web local để xem giao diện
+
+**Cửa sổ 1**, bật emulator và giữ cửa sổ mở:
+
+```powershell
+npm.cmd run emulators
+```
+
+**Cửa sổ 2**, chỉ tạo dữ liệu mẫu khi database local còn trống:
+
+```powershell
+npm.cmd run seed:emulators
+```
+
+Mở **http://127.0.0.1:5000/?firebase=emulator**. Giữ `?firebase=emulator` để web chọn đúng môi trường local.
+
+| Vai trò | Tên đăng nhập | Mật khẩu |
+| --- | --- | --- |
+| Admin local | `admin` | `admin123` |
+| Học sinh local | `hs10a1` | `123456` |
+
+Emulator UI: **http://127.0.0.1:4000**. Nếu seed báo database không trống, giữ dữ liệu hiện có; không cần seed lại. Khi dừng bằng Ctrl+C, lệnh emulator lưu dữ liệu vào `.emulator-data/` để lần sau nạp lại.
+
+Chế độ mở web này phục vụ xem giao diện/dữ liệu; nó chưa tự chạy backend cộng điểm hoặc nối với simulator. Dùng test tự động phía trên để kiểm tra trọn luồng. Không chạy hai bộ emulator cùng lúc.
+
+## 5. Chạy AI với phần cứng thật
+
+Chỉ làm mục này khi đã có ESP32 và thiết bị nối vào máy tính.
+
+### 5.1. Chuẩn bị tài khoản và thùng
+
+- Website thật: **https://smarttrashbin-98428.web.app/**.
+- Project Firebase: `smarttrashbin-98428`.
+- Tài khoản học sinh mẫu: **`hs_mau_esp`**, lớp **11T2**, mã **ESP-DEMO-001**.
+- Mật khẩu: [secrets/TAI_KHOAN_HOC_SINH_MAU.md](secrets/TAI_KHOAN_HOC_SINH_MAU.md). Đây là tài khoản cloud, khác tài khoản emulator ở mục 4.
+
+Trên trang admin, kiểm tra thùng `BIN-01` tồn tại. Nội dung `hardware/bin_config.json` phải khớp:
+
+```json
+{ "bin_id": "BIN-01" }
+```
+
+QR, ID thùng trên Firebase và config laptop phải giống nhau. Đổi config thì khởi động lại camera/bridge.
+
+### 5.2. Chuẩn bị khóa backend
+
+Giữ nguyên `.env` và khóa đang chạy được. Nếu chưa có `.env`:
+
+```powershell
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+Trong `.env`, đặt đường dẫn đến **file service account thực tế** của project `smarttrashbin-98428`, ví dụ:
+
+```dotenv
+GOOGLE_APPLICATION_CREDENTIALS=./secrets/firebase-service-account.json
+```
+
+File ví dụ trên không tự được tạo khi copy `.env.example`. Nếu chưa có khóa, xem [DEPLOYMENT.md](DEPLOYMENT.md). Khóa chỉ dùng cho backend, giữ trong `secrets/`, không chép vào `assets/` hoặc `public/`. Camera/ESP32 không cần mật khẩu thiết bị hay khóa quản trị.
+
+### 5.3. Đấu nối và nạp firmware
 
 | Thiết bị | GPIO |
 | --- | --- |
-| Siêu âm mở nắp 1, TRIG/ECHO | 5 / 18 |
-| Siêu âm mở nắp 2, TRIG/ECHO | 17 / 16 |
-| Siêu âm đếm rác 1, TRIG/ECHO | 22 / 23 |
-| Siêu âm đếm rác 2, TRIG/ECHO | 13 / 14 |
-| Servo ngăn 1 / ngăn 2 | 19 / 21 |
+| HC-SR04 đếm ngăn nhựa: TRIG / ECHO | 23 / 34 |
+| HC-SR04 đếm ngăn kim loại: TRIG / ECHO | 22 / 35 |
+| Servo ngăn nhựa / kim loại | 18 / 19 |
 | Module còi kích LOW | 27 |
 
-Giữ ngưỡng mở **≤ 10 cm**, đếm **≤ 6 cm**, nhả đếm **> 8 cm**, tự đóng sau **2 giây** không còn vật gần, còi đặt **200 ms** và bộ đếm riêng từng ngăn. Servo đóng 0°, mở 90°, 50 Hz, xung 500–2.400 µs.
+Dùng số GPIO; rút nguồn trước khi đấu dây. Servo dùng nguồn phù hợp và chung GND với ESP32; không cấp nguồn servo từ GPIO. ECHO cần chuyển mức/chia áp nếu vượt giới hạn điện áp ESP32.
 
-- Servo cần nguồn phù hợp và chung GND với ESP32; không cấp nguồn servo từ GPIO.
-- Kiểm tra điện áp ECHO, dùng chuyển mức/chia áp khi vượt giới hạn board. Kiểm tra đúng loại còi kích LOW.
-- Board/model cảm biến/nguồn cụ thể chưa được xác nhận trong repo; đối chiếu linh kiện thật và hành trình nắp trước cấp tải.
-- Camera chỉ nối laptop, không nối GPIO ESP32.
-- Khi đã mở, vật còn gần vẫn giữ nắp mở, kể cả hết quyền AI. Khi vật rời xa, nắp đóng theo timer. **Không có echo không được coi là đường đóng đã trống**, nên cảm biến lỗi có thể giữ nắp mở; kiểm tra và khắc phục cảm biến, không ép đóng vào vật.
-- Chu kỳ lấy mẫu có delay nên thời điểm đóng/tắt còi thực tế có thể trễ hơn giá trị đặt. Đây không phải hệ thống chống kẹp chuyên dụng.
+Mở `hardware/Green-School/Green-School.ino` trong Arduino IDE. Cài board ESP32 và thư viện **ESP32Servo**, chọn đúng board/cổng COM. Bản đã kiểm thử compile dùng ESP32 Dev Module, ESP32 core 3.3.12 và ESP32Servo 3.2.1; chọn board theo thiết bị thực tế.
 
-## 6. Nạp firmware và chọn chế độ
-
-Mở `hardware/Green-School/Green-School.ino` bằng Arduino IDE; cài board ESP32 và thư viện `ESP32Servo`, chọn đúng board/COM. Đóng mọi bridge/camera/Serial Monitor đang giữ COM trước khi upload.
-
-Ở đầu file:
+Giữ chế độ AI:
 
 ```cpp
-#ifndef AI_CONTROL_ENABLED
 #define AI_CONTROL_ENABLED 1
-#endif
 ```
 
-- **AI:** giữ `1`. Đưa vật gần chưa tự mở; cần handshake và quyền ngăn từ `camera_ai.py`. Log khởi động `GS_AI_BOOT 1`.
-- **Thủ công:** đổi giá trị thành `0`, Verify/Upload lại. Nắp mở theo khoảng cách như trước; chạy bridge thủ công ở mục 9. Log `GS_AI_MANUAL 1`.
+Đóng camera/bridge/Serial Monitor đang giữ COM rồi Verify và Upload. Firmware hiện đặt servo 50 Hz, đóng 1200 µs, mở 1800 µs; xác nhận chiều và hành trình trên cơ cấu thật trước vận hành. Có thể dùng `hardware/Servo-Test/Servo-Test.ino` để thử riêng servo sau khi tháo liên kết nắp; sau đó nạp lại firmware Green-School.
 
-Trong cả hai chế độ, bốn cảm biến, đếm, còi và log `GS_DROP` vẫn hoạt động. AI không tự chuyển sang thủ công khi PC mất kết nối. Khi bật nguồn/reset, firmware đặt hai servo về góc đóng, cần kiểm tra an toàn cơ khí trước khi thử.
-
-Ở chế độ AI, khi cảm biến đếm đúng ngăn xác nhận sẽ có `GS_AI_DROP <id> <sensor> <counter>`. Camera dùng message này để gửi event, bỏ qua `GS_DROP` legacy để không cộng hai lần. `GS_AI_ACK` chỉ xác nhận nhận quyền, không chứng minh nắp đạt góc hay rác đã rơi.
-
-Đóng Serial Monitor sau khi kiểm tra 115200 baud. Cổng COM chỉ được một chương trình giữ. Chi tiết giao thức ở [hardware/README_HTTP_BRIDGE.md](hardware/README_HTTP_BRIDGE.md).
-
-## 7. Tải model, kiểm tra và thử camera trước
-
-Model: [WasteWise Garbage Classifier](https://huggingface.co/SriramRokkam/wastewise-garbage-cls), YOLOv8n-cls ONNX CPU, tám loại rác, trong đó có `plastic`/`metal`. Chương trình chỉ cho hai nhãn này mở ngăn; các loại khác/không chắc chắn bị từ chối.
+### 5.4. Kiểm tra model và thử camera riêng
 
 ```powershell
 .\.venv\Scripts\python.exe hardware/download_camera_model.py
@@ -151,135 +232,113 @@ Model: [WasteWise Garbage Classifier](https://huggingface.co/SriramRokkam/wastew
 .\.venv\Scripts\python.exe hardware/camera_ai.py --camera 0 --fps 5 --dry-run
 ```
 
-Downloader ghim revision/checksum, không tải “latest” ngẫu nhiên; runtime kiểm tra hash, input/output và nhãn trước chạy. Model tải về bị Git ignore. Chi tiết checksum và **giấy phép mâu thuẫn giữa model card và metadata** được ghi ở [hardware/models/README.md](hardware/models/README.md).
+Đợi `MODEL OK`. Trong preview, lấy hết vật/tay khỏi ô giữa ảnh, **nhấn C**, giữ ô trống đến khi thấy `CLEAR`. Đưa chai nhựa/lon vào thử; Q hoặc Esc để thoát. Nếu camera 0 không đúng, thử `--camera 1`.
 
-Trong preview:
+`--dry-run` chỉ thử camera/model, không mở servo hay ghi Firebase. Giữ camera và ánh sáng cố định; nếu thay đổi thì lấy vật ra và calibrate bằng C lại. Model chỉ cho nhãn `plastic`/`metal` mở ngăn; thông tin artifact và giấy phép ở [hardware/models/README.md](hardware/models/README.md).
 
-1. Cố định camera, nền và ánh sáng, để một vùng đặt vật rõ trong ô vuông giữa ảnh.
-2. **Lấy hết vật/tay ra khỏi ô vuông rồi nhấn C** để chụp nền trống. Đợi `CLEAR` ít nhất khoảng một giây.
-3. Đưa từng chai nhựa/lon vào ô; xem nhãn, điểm và thời gian suy luận. Thử cả giấy, thủy tinh, tay và nền trống để tìm nhầm lẫn.
-4. Sau mỗi lượt lấy vật khỏi vùng để nhận lượt tiếp. Thay góc camera/ánh sáng thì lấy hết vật ra và C lại; không calibrate với chai/tay trong ảnh.
-5. Q/Esc hoặc Ctrl+C để dừng. Dry-run không mở COM, không truy cập Firebase và không điều khiển nắp.
+### 5.5. Chạy hệ thống mỗi ngày
 
-`--fps 5` giới hạn suy luận tối đa 5 lần/giây, không ép FPS camera. Preview hiển thị FPS thực tế/mục tiêu và ms suy luận. Model chạy chậm thì bỏ frame cũ, không tích video. Nếu camera 0 không đúng, thử `--camera 1`.
+Mở **hai cửa sổ PowerShell tại thư mục project**.
 
-Có thể thử một ảnh tĩnh mà không mở camera/USB/Firebase:
-
-```powershell
-.\.venv\Scripts\python.exe hardware/camera_ai.py --image C:/images/chai.jpg
-```
-
-Không hứa độ chính xác trên thùng thật từ điểm validation của tác giả. Bước đầu thử tối thiểu 30 lượt nhựa, 30 lượt kim loại và 30 lượt âm tính; ghi cả lượt từ chối/mở sai trước khi vận hành có người dùng.
-
-## 8. Chạy AI hoàn chỉnh mỗi ngày
-
-Sau setup/nạp firmware, mở **hai cửa sổ PowerShell tại project root**.
-
-**Cửa sổ 1 — backend:**
+**Cửa sổ 1 — backend cộng điểm:**
 
 ```powershell
 npm.cmd run backend
 ```
 
-Đợi `Backend ready: smarttrashbin-98428`.
+Đợi `Backend ready: smarttrashbin-98428` rồi giữ cửa sổ mở.
 
-**Cửa sổ 2 — camera + USB, thay COM5 bằng cổng thật:**
+**Cửa sổ 2 — camera và USB:** thay `COM5` bằng cổng ESP32 thực tế.
 
 ```powershell
 .\.venv\Scripts\python.exe hardware/camera_ai.py --camera 0 --fps 5 --port COM5
 ```
 
-Đợi `MODEL OK`, `GS_AI_READY 1`, calibrate ô trống bằng C. Không chạy thêm `firebase_http_bridge.py`, bridge PowerShell hoặc `ei_bridge.py` trên COM đó.
+Đợi `MODEL OK`, `GS_AI_READY 1`. Lấy vật khỏi ô camera, nhấn C và chờ `CLEAR`. Hai cảm biến đếm cần đọc trống hợp lệ (> 8 cm) để firmware sẵn sàng. Chỉ một ứng dụng được giữ COM; đóng Serial Monitor và không chạy thêm bridge.
 
-1. Học sinh đăng nhập web, quét QR đúng thùng; ví dụ https://smarttrashbin-98428.web.app/#/scan/BIN-01. Đợi đúng học sinh/lớp và phiên hoạt động.
-2. Đưa một vật vào ô camera. Khi đủ ba mẫu ổn định và điểm ≥ 0,85, chương trình log `ARM` và cấp quyền đúng ngăn trong 5 giây.
-3. Đưa vật gần cảm biến mở nắp đúng ngăn ≤ 10 cm rồi thả vào. Ngăn còn lại không được mở theo lượt đó. Chỉ thấy vật trước camera chưa có điểm.
-4. Cảm biến đếm xác nhận rác rơi; log `GS_AI_DROP`, sau đó `SENT USB-...`. Backend hiện `PROCESSED ... +... points` hoặc `REJECTED` kèm lý do.
-5. Lấy tay/vật ra; đợi nắp đóng, cảm biến đếm nhả, `GS_AI_DONE` và ô camera clear trước lượt mới.
-6. Kiểm tra lượt, điểm/lịch sử học sinh, điểm lớp và bảng xếp hạng realtime trên web.
+Học sinh thao tác:
 
-`SENT` chỉ nghĩa Firebase nhận event, `PROCESSED` mới là đã cộng điểm. Mặc định nhựa 2 điểm, kim loại 3 điểm, cooldown 3 giây, phiên 3 phút. Admin có thể đổi settings; Python không tự cộng điểm. Backend gia hạn phiên khi xử lý lượt hợp lệ. Phiên hết hạn thì chọn **Bỏ rác tiếp** hoặc quét QR lại; không bỏ rác trước rồi quét QR sau.
+1. Đăng nhập website bằng tài khoản học sinh. Quét QR hoặc mở https://smarttrashbin-98428.web.app/#/scan/BIN-01 để tạo phiên đúng thùng.
+2. Đưa **một** vật nhựa/kim loại vào ô camera. Mặc định cần confidence ≥ 0,75 và 3 mẫu ổn định; phiên còn ít nhất 6 giây, rule đang bật.
+3. Khi log có `ARM` và firmware trả `GS_AI_ACK`, nắp đúng ngăn được ra lệnh mở. **Nắp mở rồi mới thả rác.** Quét QR đơn thuần chưa mở servo.
+4. Cảm biến đúng ngăn xác nhận rác: log `GS_AI_DROP`, sau đó `SENT USB-...`. Backend hiện `PROCESSED` hoặc `REJECTED` kèm lý do.
+5. Lấy tay/vật ra, đợi nắp đóng, `GS_AI_DONE` và ô camera clear trước lượt tiếp theo. Kiểm tra lịch sử/điểm trên web.
 
-Nếu lắp ngăn 1 kim loại, ngăn 2 nhựa:
+`SENT` nghĩa Firebase đã nhận event; **`PROCESSED` mới xác nhận cộng điểm**. Mặc định nhựa 2 điểm, kim loại 3 điểm, cooldown 3 giây và phiên 3 phút; admin có thể thay đổi. Hết phiên thì chọn **Bỏ rác tiếp** hoặc quét QR lại.
+
+Nếu lắp ngăn 1 kim loại, ngăn 2 nhựa, dùng mapping đảo ở Python:
 
 ```powershell
 .\.venv\Scripts\python.exe hardware/camera_ai.py --camera 0 --fps 5 --port COM5 --sensor1 metal --sensor2 plastic
 ```
 
-Có thể chỉnh `--threshold 0.9`, `--stable-frames 4`, `--config <file>`. Hai mapping phải khác nhau. Không giảm threshold chỉ để ép một vật khó nhận diện được tính điểm.
+Camera QR trên điện thoại và camera phân loại trên laptop khác vai trò. Nếu dùng cùng webcam cho web và Python, phải dừng camera trên web trước.
 
-Trạng thái preview: `WAIT_FIRMWARE` đợi firmware, `WAIT_FIREBASE` đợi dữ liệu phiên/settings mới, `SCAN_QR` cần mở/gia hạn phiên, `WAIT_CLEAR` đợi ô trống, `READY` đã clear (vẫn phải có loại rác hợp lệ), `WAIT_ACK`, `WAIT_DROP`, `WAIT_DONE`. Web “thùng đang kết nối” dựa trên heartbeat, **không chứng minh camera/model/servo đang sẵn sàng**; xem preview/log khi chẩn đoán.
+## 6. Chạy thủ công không AI
 
-## 9. Chạy thủ công không AI
+Đổi `AI_CONTROL_ENABLED` thành `0` rồi nạp lại firmware. Chế độ này **mở nắp bằng tay**, chỉ đếm rác/còi; sensor 1 quy ước nhựa, sensor 2 kim loại.
 
-Chọn `AI_CONTROL_ENABLED 0` và upload lại firmware. Chế độ này không xác minh vật liệu; sensor 1/2 được quy ước thành nhựa/kim loại.
+**Cửa sổ 1:**
 
 ```powershell
-# Cửa sổ 1:
 npm.cmd run backend
-# Cửa sổ 2:
+```
+
+**Cửa sổ 2:**
+
+```powershell
 .\.venv\Scripts\python.exe hardware/firebase_http_bridge.py --port COM5
 ```
 
-Các bước QR/phiên/cảm biến/cộng điểm như mục 8. Test độc lập trên bàn: vật gần ≤ 10 cm mở nắp, bỏ ra xa đóng sau khoảng 2 giây; vật qua cảm biến đếm ≤ 6 cm tạo `GS_DROP`, phải ra > 8 cm mới đếm tiếp.
+Học sinh đăng nhập và mở phiên QR trước khi bỏ rác. Vật ≤ 6 cm tạo `GS_DROP`; cần ra > 8 cm mới đếm lượt tiếp. Không chạy camera AI đồng thời trên cùng COM.
 
-## 10. Dừng, khởi động lại và giới hạn
+## 7. Dừng và khởi động lại
 
-- Q/Esc/Ctrl+C camera trước, chờ backend xử lý event cuối rồi dừng backend. Camera cố gửi CANCEL cho lượt đang chờ; ESP32 mất ping quá 3 giây cũng thu hồi quyền. Nắp đang mở vẫn hoàn thành đóng theo khoảng cách, không ép đóng ngay khi mất PC.
-- Cảm biến đếm/còi và bộ đếm cục bộ vẫn chạy khi PC/mạng lỗi, nhưng không có quyền AI thì không mở lượt mới hoặc tự cộng điểm. Bộ đếm ESP32 ở RAM, reset về 0.
-- Tắt chương trình/mất nguồn có thể mất event chưa gửi trong queue RAM, tối đa 100 lượt, TTL gửi 30 giây. Pending đã ở Firebase quá 60 giây hoặc phiên hết hạn có thể bị backend từ chối khi chạy lại.
-- Snapshot phiên ngăn đổi học sinh giữa lượt; backend vẫn kiểm tra lại. Monitor phiên/settings polling nên thay đổi có thể có độ trễ; lượt không hợp lệ không được bảo đảm cộng điểm.
-- Một vật mỗi lượt. Model học bề ngoài, không đo chất liệu và có thể nhầm vật sơn/bọc. Kiểm tra nền chỉ phù hợp camera/ánh sáng cố định; chưa phải detector hoặc hệ thống chống gian lận.
-- ID thùng là định danh, không phải xác thực phần cứng. Ai biết dữ liệu bin/phiên có thể giả gửi event/heartbeat; Rules không cho bridge ghi trực tiếp điểm hoặc sửa event cũ.
+- Q/Esc hoặc Ctrl+C để dừng camera trước. Chờ backend xử lý event cuối rồi Ctrl+C backend.
+- Firmware thu hồi quyền khi mất ping > 3 giây và báo `GS_AI_OFFLINE 1`; Python bắt tay lại. Cần cả firmware và Python bản cập nhật.
+- Rút USB hoặc chương trình dừng vì lỗi: xử lý kết nối, kiểm tra cảm biến trống rồi chạy lại. Sau khởi động phải calibrate nền camera lại.
+- Khi đã mở, nắp đóng sau khoảng 2 giây kể từ khi quyền kết thúc và cảm biến đọc trống; còn vật hoặc mất ECHO sẽ giữ mở. Cảm biến đếm không quan sát toàn bộ hành trình nắp, cần kiểm tra cơ khí thật.
+- Queue gửi event nằm trong RAM, tối đa 100 lượt, thời hạn gửi 30 giây. Tắt chương trình/mất nguồn có thể mất lượt chưa gửi; không tự tạo ID mới để gửi lại một lượt cũ.
 
-## 11. Xử lý lỗi
+## 8. Tra lỗi nhanh
 
-| Hiện tượng | Kiểm tra |
+| Hiện tượng | Việc cần làm |
 | --- | --- |
-| Python/py không chạy | Cài Python 3.12 thật, tạo venv bằng executable đúng; đừng chỉ cài Launcher |
-| Thiếu module / preview lỗi GUI | Cài requirements-camera trong đúng venv; không dùng headless OpenCV |
-| Checksum mismatch | File không đúng artifact; đổi tên/loại file lỗi rồi chạy downloader lại, không bỏ qua hash |
-| Camera không mở / ảnh đứng | Kiểm tra index, quyền Windows, cáp và app/trình duyệt khác giữ camera |
-| Không có `GS_AI_READY` sau 15 giây | Firmware AI đã nạp chưa, đúng COM/baud, hai nắp/cảm biến có đang bận/kẹt không; lỗi thì dừng và khởi động lại sau khi clear |
-| `Firmware is in manual mode` | Upload lại với `AI_CONTROL_ENABLED 1`, hoặc dùng bridge thủ công với firmware 0 |
-| Access denied ở COM | Đóng Serial Monitor/bridge cũ/app khác; chỉ camera hoặc bridge được giữ COM |
-| Camera nhận đúng nhưng không ARM | Calibrate C khi trống; đợi clear, đúng phiên QR còn ít nhất 6 giây, rule đang bật, đúng mapping và đủ confidence/frame |
-| Đã ARM nhưng không mở | Đưa vật gần đúng cảm biến ≤ 10 cm trong hạn 5 giây; kiểm tra dây/nguồn servo và ACK |
-| `WAIT_DONE` lâu / nắp không đóng | Lấy vật ra khỏi hai cảm biến đếm > 8 cm, khỏi cảm biến nắp > 10 cm; kiểm tra echo. Không tự bypass trạng thái để mở tiếp |
-| Camera STOPPED / USB rút | Ngừng dùng, xử lý thiết bị, khởi động lại; không hứa phục hồi lượt chưa gửi |
-| Backend không đọc được key | Kiểm tra `.env`, đúng tên file JSON, project_id và quyền service account; không in/chia sẻ khóa |
-| HTTP 401/403 | Kiểm tra Rules, thùng/QR/config, phiên, loại rác và đồng hồ laptop; không cần tài khoản thùng |
-| SENT nhưng chưa có điểm | Backend phải còn chạy, tìm cùng event ID trong log/Firebase; xem processed/rejected, không gửi lại bằng ID mới |
-| REJECTED | Xem reason: cooldown, timestamp, tài khoản khóa, rule tắt, phiên hết hạn/đổi |
+| Python báo không tìm thấy executable | Kiểm tra Python gốc còn tồn tại và `.venv` dùng đúng bản cài; chạy lệnh `--version` ở mục 2 |
+| Simulator báo thiếu g++ | Kiểm tra `g++ --version`, cài compiler C++17 hoặc sửa PATH |
+| Thiếu module Python | Cài đúng requirements vào `.venv`, không cài sang Python khác |
+| Emulator không bật | Kiểm tra JDK21 và các cổng 4000, 4400, 4500, 5000, 9000, 9099; tắt bộ emulator cũ |
+| Web local không thấy dữ liệu mẫu | Mở đúng URL có `?firebase=emulator`; seed một lần khi database local trống |
+| `WAIT_FIRMWARE` / chưa READY sau 15 giây | Kiểm tra firmware AI, COM/baud và hai cảm biến đếm trống, không mất ECHO |
+| `Firmware is in manual mode` | Nạp firmware `AI_CONTROL_ENABLED=1` để chạy camera, hoặc dùng bridge thủ công với firmware 0 |
+| `Access denied` ở COM | Đóng Serial Monitor và ứng dụng khác đang giữ cổng |
+| `WAIT_FIREBASE` | Kiểm tra Internet, config thùng và khả năng đọc phiên/settings |
+| `SCAN_QR` | Mở/gia hạn phiên đúng thùng bằng tài khoản học sinh |
+| `WAIT_CLEAR` | Nhấn C khi ô trống và đợi CLEAR; không calibrate khi có chai/tay |
+| READY nhưng không ARM | Kiểm tra nhãn, confidence/frame, rule, cooldown và phiên còn ≥ 6 giây; READY chưa phải lệnh mở |
+| Có ACK nhưng servo không quay | Kiểm tra nguồn, chung GND, dây GPIO18/19 và hành trình; ACK không xác nhận vị trí thực |
+| `WAIT_DONE` lâu / nắp không đóng | Kiểm tra ECHO, lấy vật khỏi cảm biến đếm > 8 cm, chờ timer; không bỏ qua trạng thái để ép mở tiếp |
+| Backend không đọc được khóa | Kiểm tra đường dẫn `.env`, file JSON và đúng project; không in/chia sẻ private key |
+| HTTP 401/403 | Kiểm tra Rules, thùng/phiên/mapping và giờ laptop; bridge không cần tài khoản thùng |
+| SENT nhưng chưa có điểm | Giữ backend chạy, tìm cùng event ID trong log và xem processed/rejected |
 
-## 12. Kiểm thử và trạng thái bàn giao
+Web báo thùng online dựa trên heartbeat; trạng thái đó không đo sức khỏe camera hoặc vị trí servo.
 
-Không cần hardware cho test Python/Node. Test model thật được chạy khi file ONNX đã tải; nếu chưa tải thì smoke test đó sẽ skip.
+## 9. Kiểm thử và tài liệu liên quan
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
 npm.cmd test
-# Cần JDK 21 và Firebase emulator; dùng demo-green-school, không production:
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
+npm.cmd run simulate:esp
 npm.cmd run test:emulators
 ```
 
-Harness firmware không cần ESP32, cần g++ hỗ trợ C++17:
+Lần kiểm tra ngày 07/11/2026 đã đạt: 26 test Node, 30 test Python, mô phỏng ESP, harness firmware AI/thủ công và kiểm thử tích hợp emulator. Firmware AI đã compile bằng toolchain ESP32. Test ONNX thật chỉ chạy khi model đã tải; nếu chưa có sẽ skip.
 
-```powershell
-New-Item -ItemType Directory -Path .cache -Force | Out-Null
-g++ -std=c++17 -Wall -Wextra -I tests/firmware tests/firmware/firmware_test.cpp -o .cache/firmware-ai-test.exe
-.\.cache\firmware-ai-test.exe
-g++ -std=c++17 -Wall -Wextra -DAI_CONTROL_ENABLED=0 -I tests/firmware tests/firmware/firmware_test.cpp -o .cache/firmware-manual-test.exe
-.\.cache\firmware-manual-test.exe
-```
+Chưa kiểm chứng servo, nguồn, cảm biến hoặc độ chính xác camera trên thùng thật trong lần này. Nhãn/khoảng cách tổng hợp của simulator không thay thế kiểm thử thiết bị. Khi có hardware, thử từng ngăn và nhiều lượt nhựa/kim loại/lượt âm tính trước khi cho học sinh vận hành.
 
-Harness kiểm tra gating, cảm biến, timer, đếm/còi, timeout và parser trong hai chế độ; không thay compile toolchain ESP32 hoặc kiểm tra cơ khí thật. Việc cài đặt code/model và các test tự động không chứng minh độ chính xác camera hoặc một lượt bỏ rác thật đã đạt.
-
-Bản tích hợp này không tự upload firmware, không deploy Hosting/Rules và không tạo event thử trên production. Cần người vận hành thử camera/thùng thật theo mục 7–8 trước bàn giao cho học sinh.
-
-Đã chạy: **26 test Python**, **26 test Node**, kiểm thử tích hợp **Auth/Database/Hosting Emulator + backend**, smoke test ONNX CPU và harness firmware AI/thủ công. Cả hai cấu hình firmware đã compile bằng ESP32 toolchain. Kết quả này chưa bao gồm đo độ chính xác bằng camera thật hoặc xác nhận rác rơi trên thùng thật.
-
-- [hardware/README_HTTP_BRIDGE.md](hardware/README_HTTP_BRIDGE.md): giao thức và bridge.
-- [hardware/models/README.md](hardware/models/README.md): model, hash, giấy phép.
-- [CAMERA_AI_PLAN.md](CAMERA_AI_PLAN.md): phạm vi và các tiêu chí nghiệm thu còn cần làm trên thiết bị.
-- [DEPLOYMENT.md](DEPLOYMENT.md): kiến trúc cloud và lịch sử triển khai.
+- [MO_PHONG_ESP.md](MO_PHONG_ESP.md): cấu trúc project, lỗi mất liên kết đã sửa và phạm vi mô phỏng.
+- [hardware/README_HTTP_BRIDGE.md](hardware/README_HTTP_BRIDGE.md): giao thức USB và cách bridge gửi event.
+- [hardware/models/README.md](hardware/models/README.md): model, checksum và giấy phép.
+- [DEPLOYMENT.md](DEPLOYMENT.md): cấu hình cloud và triển khai. Chạy laptop hằng ngày không cần deploy web/Rules lại.
+- [CAMERA_AI_PLAN.md](CAMERA_AI_PLAN.md): các tiêu chí cần kiểm tra thêm trên thiết bị.

@@ -7,7 +7,7 @@ Hướng dẫn setup đầy đủ: [README.md](../README.md). Web cloud, phiên 
 | Chế độ | Firmware `AI_CONTROL_ENABLED` | Chương trình giữ COM |
 | --- | --- | --- |
 | Camera AI | `1` (mặc định mới) | `hardware/camera_ai.py` |
-| Khoảng cách thủ công | `0`, cần upload lại | `hardware/firebase_http_bridge.py` hoặc bridge PowerShell cũ |
+| Đếm thủ công | `0`, cần upload lại | `hardware/firebase_http_bridge.py` hoặc bridge PowerShell cũ |
 
 Không chạy hai bridge, Arduino Serial Monitor hoặc `ei_bridge.py` trên cùng COM. Backend Node.js không giữ COM nên phải chạy song song trong cửa sổ khác.
 
@@ -31,17 +31,18 @@ Học sinh đăng nhập web và quét QR trước khi bỏ rác, ví dụ https
 | ESP32 -> PC | `GS_AI_BOOT 1` | Khởi động/reset, hủy pending cũ ở PC |
 | PC -> ESP32 | `GS_AI_HELLO 1` | Bắt tay; thu hồi quyền cũ nếu controller reconnect |
 | ESP32 -> PC | `GS_AI_READY 1` | Sẵn sàng, nắp không mở và cảm biến đếm không đang giữ vật |
+| ESP32 -> PC | `GS_AI_OFFLINE 1` | Mất ping quá 3 giây; PC thu hồi READY/lượt đang chờ, đặt lại thời gian chờ và bắt tay lại |
 | ESP32 -> PC | `GS_AI_MANUAL 1` | Firmware thủ công, camera phải dừng |
 | PC -> ESP32 | `GS_AI_PING` | Mỗi 1 giây |
-| PC -> ESP32 | `GS_AI_ARM <id> <sensor>` | Quyền mở đúng ngăn theo khoảng cách trong 5 giây |
+| PC -> ESP32 | `GS_AI_ARM <id> <sensor>` | Mở ngay đúng ngăn, chờ rác tối đa 5 giây |
 | ESP32 -> PC | `GS_AI_ACK <id> <sensor>` | Nhận quyền, chưa phải xác nhận rác |
 | ESP32 -> PC | `GS_AI_DROP <id> <sensor> <counter>` | Cạnh rác mới, đúng ngăn, sau một chu kỳ đã mở nắp |
 | PC -> ESP32 | `GS_AI_CANCEL <id>` | Thu hồi quyền mở/gia hạn lượt mới |
 | ESP32 -> PC | `GS_AI_DONE <id> <reason>` | Quyền kết thúc, đã ra lệnh đóng hai nắp và cảm biến đếm trống; reason drop/timeout/cancel/link_lost |
 
-Mất ping > 3 giây thu hồi quyền, không tự chuyển sang thủ công. ARM trùng không kéo dài deadline; request khác khi bận bị bỏ. Python không retry mở khi mất ACK, mà hủy và handshake lại. Quá 15 giây chưa READY sẽ dừng và báo kiểm tra firmware/cảm biến.
+Mất ping > 3 giây thu hồi quyền và báo OFFLINE, không tự chuyển sang thủ công. ARM trùng không kéo dài deadline; request khác khi bận bị bỏ. Python không retry mở khi mất ACK, mà hủy và handshake lại. Quá 15 giây chưa READY sẽ dừng và báo kiểm tra firmware/cảm biến. Cập nhật cả firmware/Python để có thông báo OFFLINE; xem [mô phỏng](../MO_PHONG_ESP.md).
 
-ESP32 vẫn đọc bốn cảm biến, giữ ngưỡng 10/6/8 cm, timer đóng 2 giây, bộ đếm và còi 200 ms. Khi nắp đã mở, vật còn gần tiếp tục giữ mở để không đóng ngay khi timeout/cancel. Echo lỗi không chứng minh đường trống, không nhả latch đếm và không ép đóng nắp. Kiểm tra cảm biến nếu chờ DONE lâu.
+ESP32 chỉ đọc hai HC-SR04 đếm rác: nhựa TRIG/ECHO 23/34, kim loại 22/35. AI mở servo D18 (nhựa) hoặc D19 (kim loại) ngay khi nhận quyền. Ngưỡng đếm/nhả 6/8 cm, còi 200 ms. Sau đếm/hết hạn/hủy/mất kết nối, đóng sau 2 giây khi cảm biến đếm trống; còn vật hoặc mất ECHO sẽ giữ mở. Thủ công chỉ đếm, mở nắp bằng tay.
 
 Cả AI/thủ công vẫn in `GS_DROP <sensor> <counter>` và log khoảng cách. **Python AI bỏ qua GS_DROP**; chỉ AI_DROP đúng ID/ngăn, ACK, thời hạn và chưa xử lý mới tạo event. Firmware thủ công dùng GS_DROP qua bridge cũ. ACK/DONE không phải phản hồi vị trí servo cơ khí.
 

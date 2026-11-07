@@ -1,17 +1,35 @@
+# Installed dependencies and generated files (recreated after cloning).
 node_modules/
 public/
 .cache/
+.firebase/
+.wrangler/
 .emulator-data/
+backups/
+
+# Logs and Python environments are specific to each machine.
 *-debug.log
 *-debug.*.log
 __pycache__/
+.venv/
+venv/
+*.py[cod]
+
+# Keep the shareable template; never commit credentials or account passwords.
 .env
 .env.*
 !.env.example
 .secrets/
+secrets/
 *service-account*.json
 *firebase-adminsdk*.json
+*.pem
+*.key
+*.p12
+*.pfx
 
-secrets/
-hardware/models/*.onnx
-.venv/
+# Keep model weights in Git; ignore interrupted downloads.
+hardware/models/*.download
+
+.DS_Store
+Thumbs.db

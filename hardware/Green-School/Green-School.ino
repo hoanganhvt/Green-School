@@ -1,30 +1,27 @@
 ﻿#include <ESP32Servo.h>
 
-// Set to 0 and re-upload to use the original distance-only USB bridge.
+// Set to 0 for count-only USB bridge mode; lids must be opened by hand.
 #ifndef AI_CONTROL_ENABLED
 #define AI_CONTROL_ENABLED 1
 #endif
 
-#define TRIG_NAP1 5
-#define ECHO_NAP1 18
-#define TRIG_NAP2 17
-#define ECHO_NAP2 16
-#define TRIG_DEM1 22
-#define ECHO_DEM1 23
-#define TRIG_DEM2 13
-#define ECHO_DEM2 14
-#define SERVO1_PIN 19
-#define SERVO2_PIN 21
+#define TRIG_DEM1 23
+#define ECHO_DEM1 34
+#define TRIG_DEM2 22
+#define ECHO_DEM2 35
+#define SERVO1_PIN 18 // Plastic bin
+#define SERVO2_PIN 19 // Metal bin
 #define BUZZER_PIN 27
 
 Servo servo1, servo2;
-const int GOC_DONG = 0, GOC_MO = 90;
-const float NGUONG_MO_NAP = 10.0, NGUONG_DEM_RAC = 6.0, NGUONG_NHA_DEM = 8.0;
+// Pulses verified with Servo-Test; confirm closed/open direction on the actual lids.
+const int XUNG_DONG_US = 1200, XUNG_MO_US = 1800;
+const float NGUONG_DEM_RAC = 6.0, NGUONG_NHA_DEM = 8.0;
 const unsigned long THOI_GIAN_DONG_NAP = 2000, THOI_GIAN_COI = 200;
 const unsigned long AI_TTL = 5000, AI_LINK_TIMEOUT = 3000;
 unsigned long demRac1 = 0, demRac2 = 0;
 bool daDemRac1 = false, daDemRac2 = false;
-unsigned long lanPhatHienNap1 = 0, lanPhatHienNap2 = 0;
+unsigned long giuNap1Luc = 0, giuNap2Luc = 0;
 bool nap1Mo = false, nap2Mo = false, coiDangKeu = false;
 bool countSensorsClear = false;
 unsigned long tatCoiLuc = 0;
@@ -120,16 +117,17 @@ void readCommands() {
   }
 }
 
-void updateLid(Servo &servo, bool &opened, unsigned long &lastNear, float distance,
+void updateLid(Servo &servo, bool &opened, unsigned long &lastActive, float countDistance,
                bool allowOpen, unsigned long now) {
-  bool near = distance > 0 && distance <= NGUONG_MO_NAP;
-  if (near && (allowOpen || opened)) {
-    if (!opened) servo.write(GOC_MO);
+  if (allowOpen) {
+    if (!opened) servo.writeMicroseconds(XUNG_MO_US);
     opened = true;
-    lastNear = now;
-  } else if (opened && distance > NGUONG_MO_NAP && now - lastNear >= THOI_GIAN_DONG_NAP) {
-    // An ultrasonic timeout is not proof the lid path is clear.
-    servo.write(GOC_DONG);
+    lastActive = now;
+  } else if (opened && (countDistance <= NGUONG_NHA_DEM)) {
+    // Hold on occupied or missing echo; this sensor cannot monitor the lid path.
+    lastActive = now;
+  } else if (opened && now - lastActive >= THOI_GIAN_DONG_NAP) {
+    servo.writeMicroseconds(XUNG_DONG_US);
     opened = false;
   }
 }
@@ -150,21 +148,17 @@ void recordDrop(int sensor, float distance, bool &latched, unsigned long &counte
 
 void setup() {
   Serial.begin(115200);
-  pinMode(TRIG_NAP1, OUTPUT); pinMode(ECHO_NAP1, INPUT);
-  pinMode(TRIG_NAP2, OUTPUT); pinMode(ECHO_NAP2, INPUT);
   pinMode(TRIG_DEM1, OUTPUT); pinMode(ECHO_DEM1, INPUT);
   pinMode(TRIG_DEM2, OUTPUT); pinMode(ECHO_DEM2, INPUT);
   pinMode(BUZZER_PIN, OUTPUT); digitalWrite(BUZZER_PIN, HIGH);
   servo1.setPeriodHertz(50); servo2.setPeriodHertz(50);
-  servo1.attach(SERVO1_PIN, 500, 2400); servo2.attach(SERVO2_PIN, 500, 2400);
-  servo1.write(GOC_DONG); servo2.write(GOC_DONG);
+  servo1.attach(SERVO1_PIN, 1000, 2000); servo2.attach(SERVO2_PIN, 1000, 2000);
+  servo1.writeMicroseconds(XUNG_DONG_US); servo2.writeMicroseconds(XUNG_DONG_US);
   Serial.println(AI_CONTROL_ENABLED ? "GS_AI_BOOT 1" : "GS_AI_MANUAL 1");
 }
 
 void loop() {
   readCommands();
-  float kcNap1 = docKhoangCach(TRIG_NAP1, ECHO_NAP1); delay(60);
-  float kcNap2 = docKhoangCach(TRIG_NAP2, ECHO_NAP2); delay(60);
   float kcDem1 = docKhoangCach(TRIG_DEM1, ECHO_DEM1); delay(60);
   float kcDem2 = docKhoangCach(TRIG_DEM2, ECHO_DEM2); delay(60);
   countSensorsClear = kcDem1 > NGUONG_NHA_DEM && kcDem2 > NGUONG_NHA_DEM;
@@ -173,12 +167,13 @@ void loop() {
   if (AI_CONTROL_ENABLED && aiLinked && now - lastPing > AI_LINK_TIMEOUT) {
     aiLinked = false; aiArmed = false;
     if (!aiDropped) aiReason = "link_lost";
+    Serial.println("GS_AI_OFFLINE 1");
   }
   if (aiArmed && now - aiStarted >= AI_TTL) { aiArmed = false; aiReason = "timeout"; }
-  updateLid(servo1, nap1Mo, lanPhatHienNap1, kcNap1,
-            !AI_CONTROL_ENABLED || (aiArmed && aiSensor == 1), now);
-  updateLid(servo2, nap2Mo, lanPhatHienNap2, kcNap2,
-            !AI_CONTROL_ENABLED || (aiArmed && aiSensor == 2), now);
+  updateLid(servo1, nap1Mo, giuNap1Luc, kcDem1,
+            AI_CONTROL_ENABLED && aiArmed && aiSensor == 1, now);
+  updateLid(servo2, nap2Mo, giuNap2Luc, kcDem2,
+            AI_CONTROL_ENABLED && aiArmed && aiSensor == 2, now);
   recordDrop(1, kcDem1, daDemRac1, demRac1);
   recordDrop(2, kcDem2, daDemRac2, demRac2);
   // Count only a new edge after an earlier sampling cycle opened the lid.
@@ -190,8 +185,7 @@ void loop() {
     Serial.print("GS_AI_DONE "); Serial.print(aiId); Serial.print(" "); Serial.println(aiReason);
     aiId[0] = 0; aiSensor = 0;
   }
-  Serial.print("Nap 1: "); Serial.print(kcNap1); Serial.print(" cm | Nap 2: "); Serial.print(kcNap2);
-  Serial.print(" cm | Dem rac 1: "); Serial.print(kcDem1); Serial.print(" cm | Dem rac 2: "); Serial.print(kcDem2);
+  Serial.print("Dem rac 1: "); Serial.print(kcDem1); Serial.print(" cm | Dem rac 2: "); Serial.print(kcDem2);
   Serial.print(" cm | Tong so lan dem: "); Serial.println(demRac1 + demRac2);
   delay(20);
 }

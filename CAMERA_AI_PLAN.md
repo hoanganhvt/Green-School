@@ -1,5 +1,7 @@
 ﻿# Kế hoạch tích hợp camera AI vào Green School
 
+Cập nhật phần cứng 01/11/2026: chỉ còn hai HC-SR04 đếm rác; AI mở ngay đúng ngăn. Các yêu cầu giữ cảm biến gần nắp trong kế hoạch gốc đã được thay thế.
+
 Ngày: 30/10/2026. Trạng thái: đã implement code camera, sender và firmware AI/manual;
 chưa upload board hoặc nghiệm thu phần cứng. Xem README.md để setup/vận hành.
 
@@ -30,15 +32,13 @@ Thông số lấy từ `hardware/Green-School/Green-School.ino`; giữ giá tr�
 
 | Chức năng | Hiện tại | Yêu cầu khi thêm AI |
 | --- | --- | --- |
-| Cảm biến gần nắp 1 | TRIG 5, ECHO 18 | Tiếp tục đo khoảng cách và kích hoạt mở nắp 1 khi được AI cho phép |
-| Cảm biến gần nắp 2 | TRIG 17, ECHO 16 | Tiếp tục đo khoảng cách và kích hoạt mở nắp 2 khi được AI cho phép |
-| Ngưỡng mở nắp | Khoảng cách hợp lệ > 0 và ≤ 10 cm | Giữ nguyên; AI là điều kiện cho phép bổ sung |
-| Tự đóng nắp | Sau 2.000 ms không còn phát hiện gần | Giữ timer và xử lý riêng cho từng nắp |
+| Mở nắp | Quyền AI hợp lệ | Mở ngay đúng ngăn, không dùng cảm biến gần nắp |
+| Tự đóng nắp | Sau lượt AI, cảm biến đếm trống 2.000 ms | Giữ timer và xử lý riêng cho từng nắp |
 | Cảm biến đếm 1 | TRIG 22, ECHO 23 | Giữ phát hiện và bộ đếm ngăn 1 |
 | Cảm biến đếm 2 | TRIG 13, ECHO 14 | Giữ phát hiện và bộ đếm ngăn 2 |
 | Phát hiện rác | Khoảng cách hợp lệ ≤ 6 cm | Giữ phát hiện cạnh, không đếm mỗi vòng loop |
 | Cho phép đếm lại | Vật ra xa > 8 cm | Giữ hysteresis và trạng thái riêng từng ngăn |
-| Servo | GPIO 19/21, 50 Hz, xung 500–2.400 µs; góc 0°/90° | Giữ thông số và hiệu chỉnh cơ khí |
+| Servo | GPIO 18 (nhựa)/19 (kim loại), 50 Hz, xung 500–2.400 µs; góc 0°/90° | Giữ thông số và hiệu chỉnh cơ khí |
 | Còi | GPIO 27, kích LOW, 200 ms | Giữ báo rác qua cảm biến và tự tắt |
 | Log, bộ đếm, `GS_DROP` | Đếm từng ngăn và xuất USB | Giữ cho chẩn đoán/bridge thủ công; không gửi trùng event trong chế độ AI |
 
@@ -66,7 +66,7 @@ Luồng hiện tại trước khi thêm AI:
 1. Admin tạo lớp/học sinh/tài khoản và thùng trên web; QR chứa route `#/scan/<binId>`. ID đó phải khớp `hardware/bin_config.json` trên laptop.
 2. Học sinh đăng nhập web, quét QR hoặc nhập ID. Trang `assets/js/pages/scan.js` gọi `startSession` để ghi transaction vào `bins/<binId>/activeSession`; thùng đang có người khác dùng thì hiển thị bận.
 3. Phiên chứa UID, mã/tên đăng nhập học sinh, lớp, startedAt/expiresAt. Mặc định 3 phút; người dùng có thể gia hạn hoặc kết thúc. Đây là căn cứ gắn lượt rác với học sinh, không suy ra danh tính từ camera.
-4. ESP32 tự mở theo khoảng cách và phát `GS_DROP` khi cảm biến đếm ghi nhận. Bridge gắn loại theo sensor, đọc phiên hợp lệ tại lúc rơi rồi ghi `events/<txId>` với status pending; heartbeat cập nhật `bins/<binId>/lastSeen`.
+4. Chế độ thủ công mở nắp bằng tay; ESP32 phát `GS_DROP` khi cảm biến đếm ghi nhận. Bridge gắn loại theo sensor, đọc phiên hợp lệ tại lúc rơi rồi ghi `events/<txId>` với status pending; heartbeat cập nhật `bins/<binId>/lastSeen`.
 5. Backend laptop polling pending khoảng mỗi giây, tối đa 100 event mỗi pass. Transaction kiểm tra ID trùng, thùng, nguồn, loại rác đang bật, timestamp, phiên khớp/còn hạn, tài khoản và cooldown.
 6. Lượt hợp lệ tạo `transactions/<txId>`, cập nhật `students`, `classes`, `weekly`, thống kê `bins`, gia hạn phiên và chuyển event sang processed. Lượt không hợp lệ thành rejected có reason. Mặc định nhựa 2 điểm, kim loại 3 điểm, cooldown 3 giây; giá trị vận hành lấy từ settings Firebase.
 7. Web subscribe dữ liệu Realtime Database: trang phiên hiển thị lượt/điểm/lý do từ chối, trang cá nhân hiện lịch sử, trang chủ/admin cập nhật bảng xếp hạng/thống kê. Không cần reload trang hoặc giữ trang admin mở để backend cộng điểm.
@@ -83,15 +83,15 @@ Hosting lấy nội dung từ `public/`, được chuẩn bị bởi `scripts/pr
 Quét QR -> Firebase activeSession
 Camera -> Python/WasteWise -> nhãn ổn định + phiên hợp lệ
                           -> USB cấp quyền ngăn 1 hoặc 2
-ESP32: quyền AI đúng ngăn + khoảng cách ≤ 10 cm -> mở servo
+ESP32: nhận quyền AI -> mở ngay servo đúng ngăn
 Cảm biến đếm đúng ngăn phát hiện cạnh rác rơi -> USB xác nhận có ID lượt
 Python -> FirebaseBridge -> events/pending -> backend kiểm tra/cộng điểm -> web
-ESP32: không còn vật gần nắp trong 2 giây -> đóng nắp
+ESP32: lượt kết thúc và cảm biến đếm trống 2 giây -> đóng nắp
 ```
 
-**Điều kiện mở trong chế độ AI:** quyền AI còn hiệu lực **và** cảm biến gần nắp tương ứng phát hiện trong ngưỡng. Ngăn còn lại không mở chỉ vì có người đưa tay tới. AI không bỏ qua kiểm tra khoảng cách và không mở cả hai ngăn.
+**Điều kiện mở trong chế độ AI:** quyền AI hợp lệ mở ngay đúng một ngăn. Chỉ còn hai HC-SR04 đếm rác, không có cảm biến gần nắp.
 
-Sau rác rơi hoặc timeout, ngừng quyền mở/gia hạn mở của lượt; vẫn hoàn thành chu kỳ đóng nắp theo khoảng cách. Không nhận lượt tiếp theo trước khi nắp đóng, cảm biến đếm đã nhả và vùng camera đã clear. Chỉ chờ đóng không được arm lại cùng vật.
+Sau rác rơi hoặc timeout, ngừng quyền mở/gia hạn mở của lượt; vẫn hoàn thành chu kỳ đóng nắp theo timer và cảm biến đếm. Không nhận lượt tiếp theo trước khi nắp đóng, cảm biến đếm đã nhả và vùng camera đã clear. Chỉ chờ đóng không được arm lại cùng vật.
 
 Chương trình camera là tiến trình duy nhất mở COM khi chạy AI, thay cho chạy `firebase_http_bridge.py` hoặc `firebase_usb_bridge.ps1` riêng. Backend Node.js tiếp tục chạy riêng; Firebase là kênh tích hợp có sẵn, không thêm server trung gian.
 
@@ -120,7 +120,7 @@ File mới: `hardware/camera_ai.py`. Dependency riêng tại `hardware/requireme
 | `--port` | Bắt buộc khi điều khiển, ví dụ `COM5` |
 | `--config` | `hardware/bin_config.json` |
 | `--sensor1`, `--sensor2` | `plastic`, `metal`; phải khác nhau và dùng chung mapping servo/event |
-| `--threshold` | `0.85`, hiệu chỉnh sau thử thực tế |
+| `--threshold` | `0.75`, hiệu chỉnh sau thử thực tế |
 | `--stable-frames` | `3` mẫu mới liên tiếp cùng nhãn vượt ngưỡng |
 | `--dry-run` | Chỉ camera/model, không COM hoặc ghi Firebase |
 
@@ -142,7 +142,7 @@ Giữ 115200 baud, mỗi message một dòng. Bổ sung giao thức AI version 1
 | PC -> ESP32 | `GS_AI_HELLO 1` | Bắt tay giao thức |
 | ESP32 -> PC | `GS_AI_READY 1` | Firmware hỗ trợ AI, chưa cấp quyền ngăn nào |
 | PC -> ESP32 | `GS_AI_PING` | Heartbeat mỗi giây |
-| PC -> ESP32 | `GS_AI_ARM <requestId> <sensor>` | Cho phép ngăn tương ứng mở theo khoảng cách, thời hạn lượt 5 giây |
+| PC -> ESP32 | `GS_AI_ARM <requestId> <sensor>` | Mở ngay đúng ngăn, thời hạn chờ rác 5 giây |
 | ESP32 -> PC | `GS_AI_ACK <requestId> <sensor>` | Đã nhận quyền; chưa chứng minh servo đã mở hoặc rác đã rơi |
 | ESP32 -> PC | `GS_AI_DROP <requestId> <sensor> <counter>` | Cạnh cảm biến đếm đúng ngăn của lượt đang chờ |
 | PC -> ESP32 | `GS_AI_CANCEL <requestId>` | Thu hồi quyền mở mới của lượt |
@@ -154,7 +154,7 @@ Giữ 115200 baud, mỗi message một dòng. Bổ sung giao thức AI version 1
 - Bộ đếm/còi và GS_DROP legacy vẫn phản ánh cạnh cảm biến hiện tại, kể cả ngoài lượt AI. Python AI chỉ gửi event từ AI_DROP khớp pending ID, không gửi thêm event từ GS_DROP.
 - Mất ping quá 3 giây, cancel hoặc hết hạn: thu hồi quyền mở mới, không tạo xác nhận AI mới; tiếp tục đo khoảng cách và hoàn thành đóng nắp theo logic thời gian, không đóng cưỡng bức ngay lập tức.
 - DONE không phải xác nhận cơ khí đạt góc vì chưa có cảm biến vị trí servo. Không phát DONE chỉ vì hết timeout khi nắp còn phải chờ đóng hoặc cảm biến đếm chưa nhả.
-- Firmware có chế độ cấu hình rõ `AI_CONTROL_ENABLED`: AI dùng gating nêu trên; chế độ thủ công giữ luồng khoảng cách cũ. Không tự chuyển sang thủ công khi PC mất kết nối. Chế độ được chọn rõ khi build/nạp.
+- Firmware có chế độ cấu hình rõ `AI_CONTROL_ENABLED`: AI dùng gating nêu trên; chế độ thủ công chỉ đếm, mở nắp bằng tay. Không tự chuyển sang thủ công khi PC mất kết nối. Chế độ được chọn rõ khi build/nạp.
 - Reboot hủy quyền cũ. PC phát hiện reset/handshake mới phải hủy pending, không nhận message cũ hoặc tự mở lại.
 - Giữ hiệu chỉnh, khoảng cách và logic timer hiện tại; chỉ thay các delay polling bằng lịch `millis()` nếu đo thực tế cho thấy cần để đáp ứng Serial. Không bỏ đọc cảm biến để tăng FPS camera.
 
@@ -203,7 +203,7 @@ Giữ `backend/scoring.cjs`, worker và Rules hiện tại; chạy hồi quy đ�
 - [x] Firmware: thêm parser/gating, giữ thông số cảm biến; harness thử ARM/ACK/DROP/DONE/timeout/mất ping và cả chế độ thủ công.
 - [x] Tích hợp Python với bridge, snapshot phiên QR, queue và backend hiện tại; test Serial giả.
 - [x] Unit tests Python/Node và Firebase emulator; không gửi event thử vào production.
-- [ ] Thử thùng thật: khoảng cách cả bốn cảm biến, servo, còi, đếm, đúng/sai ngăn, mất kết nối và đổi phiên.
+- [ ] Thử thùng thật: khoảng cách cả hai HC-SR04 đếm rác, servo, còi, đếm, đúng/sai ngăn, mất kết nối và đổi phiên.
 - [x] Cập nhật README setup từ đầu, thông tin model và cách chọn chế độ thủ công; cấu hình phần cứng đo thực tế còn chờ nghiệm thu.
 
 Lệnh dự kiến, từ project root:
@@ -235,7 +235,7 @@ py hardware/camera_ai.py --camera 0 --fps 5 --port COM5
 - Nhãn khác/không chắc chắn/frame cũ hoặc lặp không tạo lượt; ba frame hợp lệ chỉ tạo một ARM.
 - ACK trễ, sai ID/ngăn, AI_DROP trước ACK, counter trùng, reboot, timeout và message legacy không gây event sai/trùng.
 - Session đổi/hết hạn, queue đầy, sender lỗi, retry không thay học sinh hoặc ghi đè event đã xử lý.
-- Luồng FSM firmware kiểm tra ngưỡng 10/6/8 cm, timeout siêu âm, timer đóng 2 giây, nhả cảm biến và chống đếm liên tục bằng test host hoặc test harness tối thiểu phù hợp toolchain. Nếu không chạy được host test phải ghi rõ và kiểm tra trên thiết bị.
+- Luồng FSM firmware kiểm tra ngưỡng đếm/nhả 6/8 cm, timeout siêu âm, timer đóng 2 giây, nhả cảm biến và chống đếm liên tục bằng test host hoặc test harness tối thiểu phù hợp toolchain. Nếu không chạy được host test phải ghi rõ và kiểm tra trên thiết bị.
 
 ```powershell
 py -m unittest discover -s tests -p "test_*.py"
@@ -248,8 +248,8 @@ Compile bằng đúng board profile ESP32 thực tế. Test mock không thay ki�
 
 ### Phần cứng và camera thật
 
-- Chế độ thủ công: khoảng cách mở nắp, tự đóng, cả hai bộ đếm/hysteresis và còi hoạt động như trước.
-- Chế độ AI: không có quyền thì tới gần không mở; đúng quyền + khoảng cách trong ngưỡng mới mở đúng ngăn; ngăn kia không mở. Đưa vật ra xa thì đóng theo timer, kể cả khi PC đã timeout/mất kết nối.
+- Chế độ thủ công: mở nắp bằng tay; hai bộ đếm/hysteresis và còi hoạt động, servo không tự mở.
+- Chế độ AI: quyền hợp lệ mở ngay đúng ngăn, ngăn kia không mở. Sau đếm/hết hạn/hủy/mất kết nối, đóng theo timer khi cảm biến đếm trống. Cảm biến đếm không quan sát vùng chuyển động của nắp.
 - Giữ vật ≤ 6 cm chỉ đếm một lần; ra > 8 cm mới đếm lại; timeout siêu âm không giả lập rác hoặc cho phép đếm lại.
 - Giữ log/bộ đếm/còi khi rác qua cảm biến; chỉ lượt AI đúng ngăn có pending ID/phiên hợp lệ mới được gửi cộng điểm. Chỉ đưa chai trước camera hoặc chỉ mở nắp cho 0 điểm.
 - Thử ít nhất 30 lượt chai, 30 lượt lon và 30 lượt âm tính. Mục tiêu ban đầu ≥ 90% lượt hợp lệ mở đúng ngăn, không mở sai hoặc mở cho vật âm tính trong bộ thử. Ghi cả lượt từ chối; chưa đạt thì hiệu chỉnh vị trí/ánh sáng/ngưỡng trước khi chạy tự động.

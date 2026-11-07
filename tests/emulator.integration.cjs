@@ -1,6 +1,8 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { db, account } = require('../scripts/local-api.cjs');
 const { seed } = require('../scripts/seed-emulators.cjs');
 const { initializeApp, deleteApp } = require('firebase-admin/app');
@@ -86,5 +88,28 @@ test('Auth + RTDB Rules + laptop backend end-to-end', { timeout: 60000 }, async 
   await Promise.all([processEvent(database, 'CONCURRENT'), processEvent(database, 'CONCURRENT')]);
   assert.equal((await db('classes/10A1')).points, 4);
   assert.equal((await db('events/CONCURRENT')).status, 'processed');
+  // Real Python controller + C++ firmware + sender payload, then RTDB Rules and backend.
+  const python = process.env.GS_PYTHON || (process.platform === 'win32'
+    ? path.resolve('.venv/Scripts/python.exe') : 'python3');
+  for (const [type, points] of [['plastic', 2], ['metal', 3]]) {
+    await db('students/10A1-DEMO/lastTs', 'DELETE', undefined, admin.idToken);
+    const fixture = {
+      type, session: await db('bins/BIN-01/activeSession'), settings: await db('settings')
+    };
+    const simulation = spawnSync(python, ['hardware/simulate_esp.py', '--event-json'], {
+      input: JSON.stringify(fixture), encoding: 'utf8', timeout: 30000
+    });
+    assert.equal(simulation.status, 0, simulation.error?.message || simulation.stderr);
+    const event = JSON.parse(simulation.stdout);
+    assert.equal(event.source, 'esp32');
+    assert.equal(event.type, type);
+    assert.equal(event.studentCode, session.studentCode);
+    const before = (await db('students/10A1-DEMO')).points;
+    assert.equal((await send(event.txId, event)).status, 'processed');
+    assert.equal((await db('students/10A1-DEMO')).points, before + points);
+    await processEvent(database, event.txId);
+    assert.equal((await db('students/10A1-DEMO')).points, before + points);
+  }
+  assert.equal((await db('classes/10A1')).points, 9);
   assert.deepEqual(backendErrors, []);
 });

@@ -108,7 +108,7 @@ class Turn:
 
 class TurnController:
     """Pure decision state. Runtime serializes access with its lock."""
-    def __init__(self, sensor1='plastic', sensor2='metal', threshold=0.85, stable=3):
+    def __init__(self, sensor1='plastic', sensor2='metal', threshold=0.75, stable=3):
         if {sensor1, sensor2} != {'plastic', 'metal'}:
             raise ValueError('Sensor mapping must contain plastic and metal exactly once')
         self.mapping = {sensor1: 1, sensor2: 2}
@@ -166,6 +166,10 @@ class TurnController:
             self.ready = False
             self.turn = None
             self.counters = {1: 0, 2: 0}
+            self.cancel()
+            return None
+        if line == 'GS_AI_OFFLINE 1':
+            self.ready = False
             self.cancel()
             return None
         if line == 'GS_AI_READY 1':
@@ -258,7 +262,7 @@ class CameraBridge:
         try:
             job()
         except Exception as error:
-            self.error = error_message(error)
+            self.error = str(error) if type(error) is RuntimeError else error_message(error)
             print('WORKER STOPPED:', self.error, flush=True)
             self.stop.set()
 
@@ -337,7 +341,7 @@ class CameraBridge:
                         line = buffer.decode('ascii', errors='replace').strip()
                         with self.lock:
                             result = self.controller.message(line, time.monotonic(), int(time.time() * 1000))
-                            if line == 'GS_AI_BOOT 1':
+                            if line in ('GS_AI_BOOT 1', 'GS_AI_OFFLINE 1'):
                                 handshake_started = time.monotonic()
                             if result:
                                 # The monitor can invalidate a session between inference and DROP.
@@ -350,7 +354,7 @@ class CameraBridge:
                                         raise RuntimeError('HTTP queue full; confirmed drop not queued')
                                 else:
                                     print('SKIPPED: session changed/offline at drop time', flush=True)
-                        if line.startswith(('GS_AI_ACK', 'GS_AI_DROP', 'GS_AI_DONE', 'GS_AI_READY')):
+                        if line.startswith(('GS_AI_ACK', 'GS_AI_DROP', 'GS_AI_DONE', 'GS_AI_READY', 'GS_AI_OFFLINE')):
                             print(line, flush=True)
                     buffer.clear()
                     overflow = False
@@ -402,7 +406,7 @@ def arguments(argv=None):
     parser.add_argument('--config', type=Path, default=DEFAULT_CONFIG)
     parser.add_argument('--sensor1', choices=('plastic', 'metal'), default='plastic')
     parser.add_argument('--sensor2', choices=('plastic', 'metal'), default='metal')
-    parser.add_argument('--threshold', type=float, default=0.85)
+    parser.add_argument('--threshold', type=float, default=0.75)
     parser.add_argument('--stable-frames', type=int, default=3)
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--check-model', action='store_true')

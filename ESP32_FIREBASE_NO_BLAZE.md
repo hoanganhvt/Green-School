@@ -40,18 +40,16 @@ Khôi phục bằng cách giải nén vào thư mục mới, chạy `npm.cmd ci`
 
 ## 3. ESP32 hiện đang làm gì
 
-Firmware hiện tại đọc 4 cảm biến siêu âm, điều khiển 2 servo và còi, đếm lượt khi vật đi qua ngăn, gửi `GS_DROP 1 <count>` hoặc `GS_DROP 2 <count>` qua USB Serial. Chưa có Wi-Fi, Firebase Auth, HTTPS hoặc tính điểm cloud.
+Firmware hiện tại đọc hai HC-SR04 đếm rác, điều khiển 2 servo và còi, đếm lượt khi vật đi qua ngăn, gửi `GS_DROP 1 <count>` hoặc `GS_DROP 2 <count>` qua USB Serial. Chưa có Wi-Fi, Firebase Auth, HTTPS hoặc tính điểm cloud.
 
 | Phần cứng | GPIO |
 |---|---|
-| Cảm biến mở nắp 1, TRIG/ECHO | 5 / 18 |
-| Cảm biến mở nắp 2, TRIG/ECHO | 17 / 16 |
 | Cảm biến đếm ngăn 1, TRIG/ECHO | 22 / 23 |
 | Cảm biến đếm ngăn 2, TRIG/ECHO | 13 / 14 |
-| Servo 1 / 2 | 19 / 21 |
+| Servo 1 (nhựa) / 2 (kim loại) | 18 / 19 |
 | Còi | 27 |
 
-Giữ nguyên ngưỡng mở nắp 10 cm, đếm 6 cm, nhả latch trên 8 cm, đóng nắp sau 2 giây và còi 200 ms. Mapping dự kiến: ngăn 1 = nhựa, ngăn 2 = kim loại; cần kiểm tra cách lắp thực tế. Cảm biến siêu âm không nhận diện vật liệu.
+AI mở ngay nắp đúng ngăn, chờ rác tối đa **5 giây**. Sau đếm/hết hạn/hủy/mất kết nối, đóng sau **2 giây** khi cảm biến đếm trống (> 8 cm). Ngưỡng đếm ≤ 6 cm, nhả đếm > 8 cm, còi 200 ms. Servo đóng 0°, mở 90°, 50 Hz, xung 500–2.400 µs. Ngăn 1 = nhựa, ngăn 2 = kim loại.
 
 USB còn dùng để nạp/debug; khi chạy độc lập ESP32 cần nguồn phù hợp và Wi-Fi có Internet.
 

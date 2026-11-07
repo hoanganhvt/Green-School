@@ -15,6 +15,17 @@ from download_camera_model import SHA256, MODEL_PATH, verify_model
 
 
 class ControllerTests(unittest.TestCase):
+    def test_worker_preserves_runtime_error_reason(self):
+        runtime = camera.CameraBridge.__new__(camera.CameraBridge)
+        runtime.stop = threading.Event()
+
+        def fail():
+            raise RuntimeError('No AI_READY after 15s; check firmware, clear sensors and COM')
+
+        runtime.run_worker(fail)
+        self.assertIn('No AI_READY after 15s', runtime.error)
+        self.assertTrue(runtime.stop.is_set())
+
     def setUp(self):
         self.control = camera.TurnController()
         self.control.ready = True
@@ -46,6 +57,18 @@ class ControllerTests(unittest.TestCase):
         self.observe(); self.observe()
         self.assertIsNone(self.control.turn)
         self.observe()
+        self.assertEqual(self.control.turn.sensor, 1)
+
+    def test_default_threshold_accepts_075_after_three_frames(self):
+        self.assertEqual(camera.arguments(['--port', 'COM6']).threshold, 0.75)
+        self.observe(present=False, clear=True)
+        for _ in range(3):
+            self.observe(score=0.749)
+        self.assertIsNone(self.control.turn)
+        for _ in range(2):
+            self.observe(score=0.75)
+        self.assertIsNone(self.control.turn)
+        self.observe(score=0.75)
         self.assertEqual(self.control.turn.sensor, 1)
 
     def test_drop_requires_ack_matching_request_sensor_and_new_counter(self):
@@ -85,6 +108,18 @@ class ControllerTests(unittest.TestCase):
         self.session['expiresAt'] = 14000
         for _ in range(3): self.observe()
         self.assertIsNone(self.control.turn)
+
+    def test_link_timeout_revokes_ready_and_current_turn(self):
+        turn = self.arm()
+        self.control.message(f'GS_AI_ACK {turn.id} 1', 10, 10000)
+        self.control.message('GS_AI_OFFLINE 1', 10.5, 10500)
+        self.assertFalse(self.control.ready)
+        self.assertTrue(turn.cancelled)
+        self.assertIsNone(self.control.message(f'GS_AI_DROP {turn.id} 1 1', 11, 11000))
+        self.control.message(f'GS_AI_DONE {turn.id} link_lost', 12, 12000)
+        self.control.message('GS_AI_READY 1', 13, 13000)
+        self.assertTrue(self.control.ready)
+        self.assertFalse(self.control.cleared)
 
     def test_swapped_mapping_and_cli_validation(self):
         self.assertEqual(camera.TurnController('metal', 'plastic').mapping['plastic'], 2)
@@ -163,6 +198,16 @@ class SerialIntegrationTests(unittest.TestCase):
         runtime.checked = time.monotonic()
         runtime.session = None
         self.assertEqual(runtime.observe('paper', 0.9, False, False, time.monotonic()), 'SCAN_QR')
+
+    def test_serial_rehandshakes_after_firmware_link_timeout(self):
+        runtime = self.runtime()
+        runtime.controller.turn = None
+        runtime.esp = self.port(runtime, [b'GS_AI_OFFLINE 1\n', b'GS_AI_READY 1\n'])
+        runtime.serial_loop()
+        self.assertIn(b'GS_AI_HELLO 1\n', runtime.esp.written)
+        self.assertTrue(runtime.controller.ready)
+        self.assertFalse(runtime.controller.cleared)
+        self.assertEqual(runtime.drops.qsize(), 0)
 
 
 class ImageTests(unittest.TestCase):
