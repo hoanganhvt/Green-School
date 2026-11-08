@@ -16,10 +16,10 @@ __pycache__/
 *.py[cod]
 
 # Keep the shareable template; never commit credentials or account passwords.
-.env
+
 .env.*
 !.env.example
-secrets/
+
 *service-account*.json
 *firebase-adminsdk*.json
 *.pem
