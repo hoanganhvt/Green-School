@@ -1,7 +1,7 @@
 ﻿"""Local camera classifier + single-owner ESP32 USB bridge. See README.md.
 
-Start with --check-model, then --dry-run. In preview, remove all objects and
-press C to calibrate the empty center square. Q/Esc stops the application.
+Start with --check-model, then --dry-run. Keep the center square empty at
+startup for automatic calibration. C recalibrates; Q/Esc stops the application.
 """
 
 import argparse
@@ -85,7 +85,7 @@ class ClearGate:
     def observe(self, frame, now):
         import numpy as np
         if self.background is None:
-            return False, False
+            self.calibrate(frame)
         # shortcut: fixed background/lighting; recalibrate empty ROI when setup changes.
         changed = float(np.mean(np.abs(self.small(frame) - self.background) > 0.10))
         clear = changed < 0.02
@@ -446,7 +446,7 @@ def main(argv=None):
         camera = CameraFrames(args.camera, stop)
         if not args.dry_run:
             runtime = CameraBridge(args, stop)
-        print('Remove objects from center square; press C to calibrate. Q/Esc stops.', flush=True)
+        print('Keep center square EMPTY at startup for automatic calibration; wait for CLEAR. C recalibrates; Q/Esc stops.', flush=True)
         while not stop.is_set():
             sample = camera.get()
             now = time.monotonic()
@@ -492,7 +492,7 @@ def main(argv=None):
             cv2.rectangle(display, ((w-side)//2, (h-side)//2), ((w+side)//2, (h+side)//2), (0, 220, 0), 2)
             text = f'{label} {score:.2f} | {state} | {1000*(after-before):.0f}ms | {actual_fps:.1f}/{args.fps:g}fps'
             cv2.putText(display, text, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 220, 0), 1)
-            status = 'C: calibrate EMPTY square' if gate.background is None else 'CLEAR' if clear else 'OBJECT' if present else 'WAIT_CLEAR'
+            status = 'CLEAR' if clear else 'OBJECT' if present else 'WAIT_CLEAR'
             cv2.putText(display, status + ' | Q: quit', (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 220, 0), 1)
             cv2.imshow('Green School Camera AI', display)
         if runtime and runtime.error:

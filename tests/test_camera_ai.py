@@ -222,13 +222,16 @@ class ImageTests(unittest.TestCase):
         self.assertEqual(float(result[0, 2, 0, 0]), 0)
         gate = camera.ClearGate()
         self.assertEqual(gate.observe(frame, 1), (False, False))
-        gate.calibrate(frame)
-        self.assertEqual(gate.observe(frame, 1), (False, False))
+        self.assertIsNotNone(gate.background)
+        self.assertEqual(gate.observe(frame, 1.5), (False, False))
         self.assertEqual(gate.observe(frame, 2.1), (True, False))
         changed = frame.copy(); changed[60:180, 100:220] = 255
         clear, present = gate.observe(changed, 3)
         self.assertFalse(clear); self.assertTrue(present)
         self.assertEqual(gate.observe(frame, 3.1), (False, False))
+        gate.calibrate(changed)
+        self.assertEqual(gate.observe(changed, 4), (False, False))
+        self.assertEqual(gate.observe(changed, 5.1), (True, False))
 
     def test_bad_artifact_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:

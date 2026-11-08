@@ -232,7 +232,7 @@ Giữ chế độ AI:
 .\.venv\Scripts\python.exe hardware/camera_ai.py --camera 0 --fps 5 --dry-run
 ```
 
-Đợi `MODEL OK`. Trong preview, lấy hết vật/tay khỏi ô giữa ảnh, **nhấn C**, giữ ô trống đến khi thấy `CLEAR`. Đưa chai nhựa/lon vào thử; Q hoặc Esc để thoát. Nếu camera 0 không đúng, thử `--camera 1`.
+Trước khi chạy, lấy hết vật/tay khỏi ô giữa ảnh. Chương trình tự lấy nền lúc khởi động; đợi `MODEL OK` và giữ ô trống khoảng 1 giây đến khi thấy `CLEAR`, không cần nhấn C. Đưa chai nhựa/lon vào thử; Q hoặc Esc để thoát. Nếu camera 0 không đúng, thử `--camera 1`.
 
 `--dry-run` chỉ thử camera/model, không mở servo hay ghi Firebase. Giữ camera và ánh sáng cố định; nếu thay đổi thì lấy vật ra và calibrate bằng C lại. Model chỉ cho nhãn `plastic`/`metal` mở ngăn; thông tin artifact và giấy phép ở [hardware/models/README.md](hardware/models/README.md).
 
@@ -254,7 +254,7 @@ npm.cmd run backend
 .\.venv\Scripts\python.exe hardware/camera_ai.py --camera 0 --fps 5 --port COM5
 ```
 
-Đợi `MODEL OK`, `GS_AI_READY 1`. Lấy vật khỏi ô camera, nhấn C và chờ `CLEAR`. Hai cảm biến đếm cần đọc trống hợp lệ (> 8 cm) để firmware sẵn sàng. Chỉ một ứng dụng được giữ COM; đóng Serial Monitor và không chạy thêm bridge.
+Trước khi chạy, lấy vật/tay khỏi ô camera để chương trình tự lấy nền. Đợi `MODEL OK`, `GS_AI_READY 1` và `CLEAR`, không cần nhấn C. Hai cảm biến đếm cần đọc trống hợp lệ (> 8 cm) để firmware sẵn sàng. Chỉ một ứng dụng được giữ COM; đóng Serial Monitor và không chạy thêm bridge.
 
 Học sinh thao tác:
 
@@ -296,7 +296,7 @@ Học sinh đăng nhập và mở phiên QR trước khi bỏ rác. Vật ≤ 6 
 
 - Q/Esc hoặc Ctrl+C để dừng camera trước. Chờ backend xử lý event cuối rồi Ctrl+C backend.
 - Firmware thu hồi quyền khi mất ping > 3 giây và báo `GS_AI_OFFLINE 1`; Python bắt tay lại. Cần cả firmware và Python bản cập nhật.
-- Rút USB hoặc chương trình dừng vì lỗi: xử lý kết nối, kiểm tra cảm biến trống rồi chạy lại. Sau khởi động phải calibrate nền camera lại.
+- Rút USB hoặc chương trình dừng vì lỗi: xử lý kết nối, kiểm tra cảm biến trống rồi chạy lại. Khi chạy lại, giữ ô camera trống để chương trình tự lấy nền mới.
 - Khi đã mở, nắp đóng sau khoảng 2 giây kể từ khi quyền kết thúc và cảm biến đọc trống; còn vật hoặc mất ECHO sẽ giữ mở. Cảm biến đếm không quan sát toàn bộ hành trình nắp, cần kiểm tra cơ khí thật.
 - Queue gửi event nằm trong RAM, tối đa 100 lượt, thời hạn gửi 30 giây. Tắt chương trình/mất nguồn có thể mất lượt chưa gửi; không tự tạo ID mới để gửi lại một lượt cũ.
 
@@ -314,7 +314,7 @@ Học sinh đăng nhập và mở phiên QR trước khi bỏ rác. Vật ≤ 6 
 | `Access denied` ở COM | Đóng Serial Monitor và ứng dụng khác đang giữ cổng |
 | `WAIT_FIREBASE` | Kiểm tra Internet, config thùng và khả năng đọc phiên/settings |
 | `SCAN_QR` | Mở/gia hạn phiên đúng thùng bằng tài khoản học sinh |
-| `WAIT_CLEAR` | Nhấn C khi ô trống và đợi CLEAR; không calibrate khi có chai/tay |
+| `WAIT_CLEAR` | Lấy vật/tay ra và đợi CLEAR. Nếu nền lúc khởi động có vật hoặc camera/ánh sáng thay đổi, nhấn c khi ô trống để lấy nền lại |
 | READY nhưng không ARM | Kiểm tra nhãn, confidence/frame, rule, cooldown và phiên còn ≥ 6 giây; READY chưa phải lệnh mở |
 | Có ACK nhưng servo không quay | Kiểm tra nguồn, chung GND, dây GPIO18/19 và hành trình; ACK không xác nhận vị trí thực |
 | `WAIT_DONE` lâu / nắp không đóng | Kiểm tra ECHO, lấy vật khỏi cảm biến đếm > 8 cm, chờ timer; không bỏ qua trạng thái để ép mở tiếp |
