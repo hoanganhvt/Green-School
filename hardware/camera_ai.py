@@ -248,7 +248,13 @@ class CameraBridge:
         self.error = None
         self.threads = []
         import serial
-        self.esp = serial.Serial(args.port, 115200, timeout=0.05, write_timeout=1)
+        try:
+            self.esp = serial.Serial(args.port, 115200, timeout=0.05, write_timeout=1)
+        except serial.SerialException as error:
+            raise RuntimeError(
+                f'Cannot open ESP32 port {args.port}: {error}. '
+                'Close Serial Monitor/other bridge processes and check the COM port and USB connection.'
+            ) from error
         try:
             for job in (self.monitor, self.sender, self.serial_loop):
                 worker = threading.Thread(target=self.run_worker, args=(job,), daemon=True)

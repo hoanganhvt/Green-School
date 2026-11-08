@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
+from types import SimpleNamespace
 import queue
 import threading
 import time
@@ -15,6 +17,14 @@ from download_camera_model import SHA256, MODEL_PATH, verify_model
 
 
 class ControllerTests(unittest.TestCase):
+    def test_serial_open_error_includes_port_and_reason(self):
+        serial = SimpleNamespace(SerialException=OSError,
+                                 Serial=Mock(side_effect=OSError('Access is denied')))
+        with patch.dict(sys.modules, serial=serial), \
+                patch.object(camera, 'FirebaseBridge'), patch.object(camera, 'load_bin_id', return_value='BIN-01'):
+            with self.assertRaisesRegex(RuntimeError, 'Cannot open ESP32 port COM6: Access is denied'):
+                camera.CameraBridge(camera.arguments(['--port', 'COM6']), threading.Event())
+
     def test_worker_preserves_runtime_error_reason(self):
         runtime = camera.CameraBridge.__new__(camera.CameraBridge)
         runtime.stop = threading.Event()
