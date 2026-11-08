@@ -2,6 +2,7 @@
 #include "../../hardware/Sensor-Servo-Test/Sensor-Servo-Test.ino"
 
 int main() {
+  assert(TRIG1 == 22 && ECHO1 == 23 && TRIG2 == 13 && ECHO2 == 14); // Same wiring as Green-School.ino
   setup();
   assert(bin1.servo.pin == 18 && bin2.servo.pin == 19);
   assert(bin1.servo.pulses.back() == 1200);

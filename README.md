@@ -226,7 +226,7 @@ Giữ chế độ AI:
 
 ### Test nhanh cảm biến → servo (không cần Python)
 
-Nạp `hardware/Sensor-Servo-Test/Sensor-Servo-Test.ino`, thư viện **ESP32Servo**, rồi mở Serial Monitor **115200 baud**. Ngăn 1 dùng TRIG/ECHO 23/34 và servo 18; ngăn 2 dùng 22/35 và servo 19. Đưa vật cách cảm biến **2–6 cm** trong hai mẫu liên tiếp: bộ đếm tăng một lần và servo tương ứng mở (1800 µs). Lấy vật ra **> 8 cm**, nắp đóng sau khoảng 2 giây (1200 µs); giữ vật hoặc mất ECHO thì giữ mở. Số đo dưới 2 cm không tạo lượt đếm.
+Nạp `hardware/Sensor-Servo-Test/Sensor-Servo-Test.ino`, thư viện **ESP32Servo**, rồi mở Serial Monitor **115200 baud**. Ngăn 1 (nhựa) dùng TRIG/ECHO 22/23 và servo 18; ngăn 2 (kim loại) dùng 13/14 và servo 19, giống firmware chính. Đưa vật cách cảm biến **2–6 cm** trong hai mẫu liên tiếp: bộ đếm tăng một lần và servo tương ứng mở (1800 µs). Lấy vật ra **> 8 cm**, nắp đóng sau khoảng 2 giây (1200 µs); giữ vật hoặc mất ECHO thì giữ mở. Số đo dưới 2 cm không tạo lượt đếm.
 
 Tháo liên kết nắp khi thử lần đầu; servo dùng nguồn riêng phù hợp và chung GND, ECHO HC-SR04 cần chuyển mức xuống 3,3 V. Sketch chỉ test phần cứng, không ghi Firebase; nạp lại `Green-School.ino` trước khi chạy camera AI.
 
@@ -323,7 +323,7 @@ Học sinh đăng nhập và mở phiên QR trước khi bỏ rác. Vật ≤ 6 
 | `WAIT_CLEAR` | Lấy vật/tay ra và đợi CLEAR. Nếu nền lúc khởi động có vật hoặc camera/ánh sáng thay đổi, nhấn c khi ô trống để lấy nền lại |
 | READY nhưng không ARM | Kiểm tra nhãn, confidence/frame, rule, cooldown và phiên còn ≥ 6 giây; READY chưa phải lệnh mở |
 | Có ACK nhưng servo không quay | Kiểm tra nguồn, chung GND, dây GPIO18/19 và hành trình; ACK không xác nhận vị trí thực |
-| `BIN_BLOCKED` / log `GS_BIN_BLOCKED n occupied\|no_echo` | Cảm biến ngăn n đọc ≤ 8 cm hoặc mất ECHO quá 10 giây: đổ rác/gỡ vật kẹt hoặc kiểm tra dây ECHO. `no_echo` gồm cả số đo nhiễu dưới 2 cm: kiểm tra VCC 5V, chung GND, dây ECHO và mạch chia áp xuống GPIO34/35. Hết kẹt sẽ có `GS_BIN_CLEAR n` và chương trình tự bắt tay lại |
+| `BIN_BLOCKED` / log `GS_BIN_BLOCKED n occupied\|no_echo` | Cảm biến ngăn n đọc ≤ 8 cm hoặc mất ECHO quá 10 giây: đổ rác/gỡ vật kẹt hoặc kiểm tra dây ECHO. `no_echo` gồm cả số đo nhiễu dưới 2 cm: kiểm tra VCC 5V, chung GND, dây ECHO và mạch chia áp xuống GPIO23/14. Hết kẹt sẽ có `GS_BIN_CLEAR n` và chương trình tự bắt tay lại |
 | `WAIT_DONE` lâu / nắp không đóng | Kiểm tra ECHO, lấy vật khỏi cảm biến đếm > 8 cm, chờ timer; không bỏ qua trạng thái để ép mở tiếp |
 | Backend không đọc được khóa | Kiểm tra đường dẫn `.env`, file JSON và đúng project; không in/chia sẻ private key |
 | HTTP 401/403 | Kiểm tra Rules, thùng/phiên/mapping và giờ laptop; bridge không cần tài khoản thùng |

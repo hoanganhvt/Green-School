@@ -1,6 +1,6 @@
 // HC-SR04: share GND with ESP32; level-shift 5 V ECHO to 3.3 V.
-const int TRIG1 = 23, ECHO1 = 34;
-const int TRIG2 = 22, ECHO2 = 35;
+const int TRIG1 = 22, ECHO1 = 23; // Plastic bin, matches Green-School.ino
+const int TRIG2 = 13, ECHO2 = 14; // Metal bin
 
 void testSensor(int number, int trig, int echo) {
   digitalWrite(trig, LOW);

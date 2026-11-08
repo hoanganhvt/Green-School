@@ -1,7 +1,7 @@
 #include <ESP32Servo.h>
 
 // Test with lid linkages disconnected; separate servo power, shared GND, ECHO level-shifted to 3.3 V.
-const int TRIG1 = 23, ECHO1 = 34, TRIG2 = 22, ECHO2 = 35;
+const int TRIG1 = 22, ECHO1 = 23, TRIG2 = 13, ECHO2 = 14; // Match Green-School.ino
 const int CLOSED_US = 1200, OPEN_US = 1800;
 
 struct TestBin {
