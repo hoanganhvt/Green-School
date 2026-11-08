@@ -16,7 +16,7 @@
 Servo servo1, servo2;
 // Pulses verified with Servo-Test; confirm closed/open direction on the actual lids.
 const int XUNG_DONG_US = 1200, XUNG_MO_US = 1800;
-const float NGUONG_DEM_RAC = 6.0, NGUONG_NHA_DEM = 8.0;
+const float KHOANG_CACH_TOI_THIEU = 2.0, NGUONG_DEM_RAC = 6.0, NGUONG_NHA_DEM = 8.0;
 const unsigned long THOI_GIAN_DONG_NAP = 2000, THOI_GIAN_COI = 200;
 const unsigned long AI_TTL = 5000, AI_LINK_TIMEOUT = 3000;
 // A falling item crosses the beam in tens of ms, so each sensor is sampled every ~2 gaps.
@@ -48,7 +48,10 @@ float docKhoangCach(int trig, int echo) {
   delayMicroseconds(10);
   digitalWrite(trig, LOW);
   unsigned long duration = pulseIn(echo, HIGH, 25000);
-  return duration ? duration * 0.0343 / 2.0 : -1.0;
+  float cm = duration * 0.0343 / 2.0;
+  // HC-SR04 cannot measure below ~2 cm; such pulses are noise from a floating/miswired ECHO.
+  // Report them as a missing echo: no false drop, lid held, GS_BIN_BLOCKED ... no_echo.
+  return cm >= KHOANG_CACH_TOI_THIEU ? cm : -1.0;
 }
 
 void baoCoi() {

@@ -36,6 +36,20 @@ int main() {
   { auto at = Serial.output.size(); waitMs(5000); assert(Serial.output.find("GS_BIN_BLOCKED", at) == std::string::npos); }
   distance(ECHO_DEM2, 20); tick(); assert(Serial.output.find("GS_BIN_CLEAR 2") != std::string::npos);
   distance(ECHO_DEM1, 0); waitMs(10100); assert(Serial.output.find("GS_BIN_BLOCKED 1 no_echo") != std::string::npos);
+  // Sub-2 cm noise (floating/miswired ECHO, as seen on a real board: 0.02-0.15 cm) is not a drop
+  // and not "clear": no count, no READY, reported as no_echo.
+  reset();
+  for (float noise : {0.02f, 0.15f, 1.9f}) { distance(ECHO_DEM1, noise); distance(ECHO_DEM2, noise); tick(); }
+  assert(demRac1 == 0 && demRac2 == 0 && !countSensorsClear);
+  distance(ECHO_DEM1, 0.05f); distance(ECHO_DEM2, 0.05f); waitMs(10100);
+  assert(demRac1 == 0 && demRac2 == 0);
+  assert(Serial.output.find("GS_BIN_BLOCKED 1 no_echo") != std::string::npos);
+  assert(Serial.output.find("GS_BIN_BLOCKED 2 no_echo") != std::string::npos);
+  assert(Serial.output.find("GS_DROP") == std::string::npos);
+#if AI_CONTROL_ENABLED
+  command("GS_AI_HELLO 1"); assert(!aiLinked && Serial.output.find("GS_AI_READY") == std::string::npos);
+#endif
+  distance(ECHO_DEM1, 2.0f); distance(ECHO_DEM2, 20); tick(); assert(demRac1 == 1); // 2 cm is a valid reading
   reset();
 #if AI_CONTROL_ENABLED
   assert(servo1.pin == 18 && servo2.pin == 19);
