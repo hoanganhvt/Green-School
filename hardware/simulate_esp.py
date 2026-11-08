@@ -103,7 +103,7 @@ def simulate_drop(firmware, label, session, settings, bin_id='BIN-01'):
     before = firmware.state[f'count{turn.sensor}']
     firmware.step(5 if turn.sensor == 1 else 20, 5 if turn.sensor == 2 else 20, 3)
     assert firmware.state[f'count{turn.sensor}'] == before, 'Counted a held object twice'
-    for line in firmware.step(ticks=16):
+    for line in firmware.step(ticks=100):  # ~3 s virtual: covers the 2 s close delay
         control.message(line, now + 2.5, wall)
     assert control.turn is None
     assert firmware.state['servo1'] == firmware.state['servo2'] == 1200
@@ -146,7 +146,7 @@ def self_test():
         for line in firmware.exchange('GS_AI_HELLO 1'):
             control.message(line, time.monotonic(), wall)
         assert control.ready
-        for line in firmware.step(ticks=23):
+        for line in firmware.step(ticks=120):  # ~3.6 s without ping; link expires after 3 s
             control.message(line, time.monotonic(), wall)
         assert not control.ready, 'PC still reports READY after the firmware link expired'
         for line in firmware.exchange('GS_AI_HELLO 1'):

@@ -1,6 +1,6 @@
 ﻿#include <ESP32Servo.h>
 
-// Set to 0 for count-only USB bridge mode; lids must be opened by hand.
+// Set to 0 for count-only USB bridge mode; servos stay detached so lids can be opened by hand.
 #ifndef AI_CONTROL_ENABLED
 #define AI_CONTROL_ENABLED 1
 #endif
@@ -19,6 +19,12 @@ const int XUNG_DONG_US = 1200, XUNG_MO_US = 1800;
 const float NGUONG_DEM_RAC = 6.0, NGUONG_NHA_DEM = 8.0;
 const unsigned long THOI_GIAN_DONG_NAP = 2000, THOI_GIAN_COI = 200;
 const unsigned long AI_TTL = 5000, AI_LINK_TIMEOUT = 3000;
+// A falling item crosses the beam in tens of ms, so each sensor is sampled every ~2 gaps.
+// Raise the gap if ghost echoes appear on the real bin (HC-SR04 datasheet suggests 60 ms).
+const unsigned long KHOANG_CACH_DO_MS = 15;
+const unsigned long THOI_GIAN_BAO_KET = 10000, CHU_KY_LOG = 500;
+bool ket1 = false, ket2 = false, daBaoKet1 = false, daBaoKet2 = false;
+unsigned long ketTu1 = 0, ketTu2 = 0, logLuc = 0;
 unsigned long demRac1 = 0, demRac2 = 0;
 bool daDemRac1 = false, daDemRac2 = false;
 unsigned long giuNap1Luc = 0, giuNap2Luc = 0;
@@ -146,21 +152,40 @@ void recordDrop(int sensor, float distance, bool &latched, unsigned long &counte
   if (distance > NGUONG_NHA_DEM) latched = false;
 }
 
+// A full bin, a stuck item or a lost ECHO holds the lid and blocks new AI cycles; say so once.
+void watchBlocked(int sensor, float distance, bool &blocked, unsigned long &since, bool &reported,
+                  unsigned long now) {
+  if (distance > NGUONG_NHA_DEM) {
+    if (reported) { Serial.print("GS_BIN_CLEAR "); Serial.println(sensor); }
+    blocked = reported = false;
+    return;
+  }
+  if (!blocked) { blocked = true; since = now; }
+  if (!reported && now - since >= THOI_GIAN_BAO_KET) {
+    reported = true;
+    Serial.print("GS_BIN_BLOCKED "); Serial.print(sensor);
+    Serial.println(distance > 0 ? " occupied" : " no_echo");
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   pinMode(TRIG_DEM1, OUTPUT); pinMode(ECHO_DEM1, INPUT);
   pinMode(TRIG_DEM2, OUTPUT); pinMode(ECHO_DEM2, INPUT);
+  digitalWrite(TRIG_DEM1, LOW); digitalWrite(TRIG_DEM2, LOW);
   pinMode(BUZZER_PIN, OUTPUT); digitalWrite(BUZZER_PIN, HIGH);
-  servo1.setPeriodHertz(50); servo2.setPeriodHertz(50);
-  servo1.attach(SERVO1_PIN, 1000, 2000); servo2.attach(SERVO2_PIN, 1000, 2000);
-  servo1.writeMicroseconds(XUNG_DONG_US); servo2.writeMicroseconds(XUNG_DONG_US);
+  if (AI_CONTROL_ENABLED) {
+    servo1.setPeriodHertz(50); servo2.setPeriodHertz(50);
+    servo1.attach(SERVO1_PIN, 1000, 2000); servo2.attach(SERVO2_PIN, 1000, 2000);
+    servo1.writeMicroseconds(XUNG_DONG_US); servo2.writeMicroseconds(XUNG_DONG_US);
+  }
   Serial.println(AI_CONTROL_ENABLED ? "GS_AI_BOOT 1" : "GS_AI_MANUAL 1");
 }
 
 void loop() {
   readCommands();
-  float kcDem1 = docKhoangCach(TRIG_DEM1, ECHO_DEM1); delay(60);
-  float kcDem2 = docKhoangCach(TRIG_DEM2, ECHO_DEM2); delay(60);
+  float kcDem1 = docKhoangCach(TRIG_DEM1, ECHO_DEM1); delay(KHOANG_CACH_DO_MS);
+  float kcDem2 = docKhoangCach(TRIG_DEM2, ECHO_DEM2); delay(KHOANG_CACH_DO_MS);
   countSensorsClear = kcDem1 > NGUONG_NHA_DEM && kcDem2 > NGUONG_NHA_DEM;
   readCommands();
   unsigned long now = millis();
@@ -185,7 +210,12 @@ void loop() {
     Serial.print("GS_AI_DONE "); Serial.print(aiId); Serial.print(" "); Serial.println(aiReason);
     aiId[0] = 0; aiSensor = 0;
   }
-  Serial.print("Dem rac 1: "); Serial.print(kcDem1); Serial.print(" cm | Dem rac 2: "); Serial.print(kcDem2);
-  Serial.print(" cm | Tong so lan dem: "); Serial.println(demRac1 + demRac2);
-  delay(20);
+  watchBlocked(1, kcDem1, ket1, ketTu1, daBaoKet1, now);
+  watchBlocked(2, kcDem2, ket2, ketTu2, daBaoKet2, now);
+  // Throttled so the debug line does not fill the USB buffer at the faster sampling rate.
+  if (now - logLuc >= CHU_KY_LOG) {
+    logLuc = now;
+    Serial.print("Dem rac 1: "); Serial.print(kcDem1); Serial.print(" cm | Dem rac 2: "); Serial.print(kcDem2);
+    Serial.print(" cm | Tong so lan dem: "); Serial.println(demRac1 + demRac2);
+  }
 }

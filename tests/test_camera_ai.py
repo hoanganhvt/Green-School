@@ -153,6 +153,8 @@ class SerialIntegrationTests(unittest.TestCase):
         runtime.bridge = type('Bridge', (), {'types': {1: 'plastic', 2: 'metal'}})()
         runtime.frame_at = runtime.checked = time.monotonic()
         runtime.drops = queue.Queue(maxsize=100)
+        runtime.blocked = set()
+        runtime.frame_max_age = camera.FRAME_MAX_AGE
         runtime.controller.turn = camera.Turn('a' * 32, 1, dict(runtime.session), time.monotonic() + 5)
         return runtime
 
@@ -219,6 +221,81 @@ class SerialIntegrationTests(unittest.TestCase):
         self.assertFalse(runtime.controller.cleared)
         self.assertEqual(runtime.drops.qsize(), 0)
 
+    def test_slow_firebase_after_ack_keeps_lid_turn_and_queues_drop(self):
+        runtime = self.runtime()
+        rid = runtime.controller.turn.id
+        runtime.controller.turn.sent = runtime.controller.turn.ack = True
+        runtime.checked = 0  # monitor request failed/slow after the lid opened
+        runtime.frame_at -= 5
+        runtime.esp = self.port(runtime, [f'GS_AI_DROP {rid} 1 1\n'.encode()])
+        with patch('builtins.print'):
+            runtime.serial_loop()
+        self.assertFalse(any(b'GS_AI_CANCEL' in m for m in runtime.esp.written))
+        self.assertEqual(runtime.drops.qsize(), 1)
+
+    def test_known_session_change_after_ack_still_cancels(self):
+        runtime = self.runtime()
+        runtime.controller.turn.sent = runtime.controller.turn.ack = True
+        runtime.session = dict(runtime.session, uid='another')
+        runtime.esp = self.port(runtime, [])
+        runtime.serial_loop()
+        self.assertIn(f'GS_AI_CANCEL {"a" * 32}\n'.encode(), runtime.esp.written)
+
+    def test_low_fps_does_not_mark_camera_stale(self):
+        args = camera.arguments(['--port', 'COM6', '--fps', '0.5'])
+        with patch.dict(sys.modules, serial=SimpleNamespace(SerialException=OSError, Serial=Mock())), \
+                patch.object(camera, 'FirebaseBridge'), patch.object(camera, 'load_bin_id', return_value='BIN-01'), \
+                patch.object(camera.threading, 'Thread'):
+            runtime = camera.CameraBridge(args, threading.Event())
+        self.assertGreaterEqual(runtime.frame_max_age, 2 / args.fps)
+
+    def test_heartbeat_failure_keeps_session_fresh(self):
+        runtime = self.runtime()
+        runtime.checked = 0
+        calls = []
+
+        def db(method, path, body=None, headers=None):
+            calls.append(path)
+            if path == 'settings':
+                return {'rules': {}}
+            return runtime.session
+
+        def heartbeat():
+            runtime.stop.set()
+            raise OSError('offline')
+
+        runtime.bridge = SimpleNamespace(bin_id='BIN-01', db=db, heartbeat=heartbeat)
+        with patch('builtins.print'):
+            runtime.monitor()
+        self.assertGreater(runtime.checked, 0)
+        self.assertEqual(calls, ['bins/BIN-01/activeSession', 'settings'])
+
+    def test_turn_deadline_starts_when_arm_is_sent(self):
+        runtime = self.runtime()
+        runtime.controller.turn.deadline = time.monotonic() + 0.2  # created long before ARM
+        runtime.esp = self.port(runtime, [])
+        before = time.monotonic()
+        runtime.serial_loop()
+        turn = runtime.controller.turn
+        self.assertTrue(turn.sent and not turn.cancelled)
+        self.assertGreaterEqual(turn.deadline, before + camera.TURN_SECONDS)
+
+    def test_blocked_bin_is_reported_and_cleared(self):
+        runtime = self.runtime()
+        runtime.controller.turn = None
+        runtime.controller.ready = False
+        runtime.esp = self.port(runtime, [b'GS_BIN_BLOCKED 2 occupied\n'])
+        with patch('builtins.print'):
+            runtime.serial_loop()
+        self.assertEqual(runtime.blocked, {2})
+        self.assertEqual(runtime.observe('paper', 0.9, False, False, time.monotonic()), 'BIN_BLOCKED')
+        runtime.stop.clear()
+        runtime.esp = self.port(runtime, [b'GS_BIN_CLEAR 2\n'])
+        with patch('builtins.print'):
+            runtime.serial_loop()
+        self.assertEqual(runtime.blocked, set())
+        self.assertEqual(runtime.observe('paper', 0.9, False, False, time.monotonic()), 'WAIT_FIRMWARE')
+
 
 class ImageTests(unittest.TestCase):
     def test_preprocessing_and_background_gate(self):
@@ -242,6 +319,38 @@ class ImageTests(unittest.TestCase):
         gate.calibrate(changed)
         self.assertEqual(gate.observe(changed, 4), (False, False))
         self.assertEqual(gate.observe(changed, 5.1), (True, False))
+
+    def test_background_follows_slow_light_drift_but_not_objects(self):
+        import numpy as np
+        frame = np.full((240, 320, 3), 100, dtype=np.uint8)
+        gate = camera.ClearGate()
+        gate.observe(frame, 0)
+        # Brighten by 1 level per frame: a fixed background would see > 0.10 change after ~26 steps.
+        for step in range(1, 61):
+            clear, present = gate.observe(np.full_like(frame, 100 + step), step)
+            self.assertFalse(present)
+        self.assertTrue(clear)
+        sudden = np.full_like(frame, 160); sudden[60:180, 100:220] = 255
+        clear, present = gate.observe(sudden, 70)
+        self.assertFalse(clear); self.assertTrue(present)
+
+    def test_camera_tolerates_dropped_frames(self):
+        import numpy as np
+        frame = np.zeros((4, 4, 3), dtype=np.uint8)
+        reads = iter([(False, None), (False, None), (True, frame)])
+        frames = camera.CameraFrames.__new__(camera.CameraFrames)
+        frames.stop, frames.lock, frames.latest, frames.sequence = threading.Event(), threading.Lock(), None, 0
+
+        def read():
+            try:
+                return next(reads)
+            except StopIteration:
+                frames.stop.set()
+                return False, None
+
+        frames.camera = SimpleNamespace(read=read)
+        frames.capture()
+        self.assertEqual(frames.sequence, 1)
 
     def test_bad_artifact_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:

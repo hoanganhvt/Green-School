@@ -23,6 +23,10 @@ LABELS = ('battery', 'biological', 'cardboard', 'glass', 'metal', 'paper', 'plas
 FRAME_MAX_AGE = 1.0
 SESSION_MAX_AGE = 2.5
 TURN_SECONDS = 5.0
+DROP_GRACE = 0.5
+SETTINGS_REFRESH = 5.0
+CAMERA_READ_GRACE = 1.0
+BACKGROUND_ADAPT = 0.05
 ID = r'[a-f0-9]{32}'
 
 
@@ -86,9 +90,12 @@ class ClearGate:
         import numpy as np
         if self.background is None:
             self.calibrate(frame)
-        # shortcut: fixed background/lighting; recalibrate empty ROI when setup changes.
-        changed = float(np.mean(np.abs(self.small(frame) - self.background) > 0.10))
+        small = self.small(frame)
+        changed = float(np.mean(np.abs(small - self.background) > 0.10))
         clear = changed < 0.02
+        if clear:
+            # Follow slow daylight drift only while the ROI is empty; sudden changes still need C.
+            self.background = (1 - BACKGROUND_ADAPT) * self.background + BACKGROUND_ADAPT * small
         self.clear_since = (now if self.clear_since is None else self.clear_since) if clear else None
         return clear and now - self.clear_since >= 1.0, changed > 0.05
 
@@ -217,10 +224,18 @@ class CameraFrames:
         self.thread.start()
 
     def capture(self):
+        failed_since = None
         while not self.stop.is_set():
             ok, frame = self.camera.read()
             if not ok:
-                return
+                # USB webcams drop single frames; only a sustained failure means disconnected.
+                now = time.monotonic()
+                failed_since = failed_since or now
+                if now - failed_since > CAMERA_READ_GRACE:
+                    return
+                self.stop.wait(0.02)
+                continue
+            failed_since = None
             with self.lock:
                 self.sequence += 1
                 self.latest = (self.sequence, time.monotonic(), frame)
@@ -244,7 +259,10 @@ class CameraBridge:
         self.bridge.check_bin()
         self.session, self.settings, self.checked = None, {}, 0
         self.frame_at = 0
+        # Inference runs at --fps; allow ~2 missed inferences before treating the camera as stale.
+        self.frame_max_age = max(FRAME_MAX_AGE, 2.5 / args.fps)
         self.drops = queue.Queue(maxsize=100)
+        self.blocked = set()
         self.error = None
         self.threads = []
         import serial
@@ -273,21 +291,34 @@ class CameraBridge:
             self.stop.set()
 
     def monitor(self):
-        next_heartbeat = 0
+        next_heartbeat = next_settings = 0
         while not self.stop.is_set():
+            # Session freshness gates arming, so it is polled alone; settings change rarely and a
+            # failed heartbeat must not mark a freshly read session as stale.
             try:
                 session = self.bridge.db('GET', f'bins/{self.bridge.bin_id}/activeSession')
-                settings = self.bridge.db('GET', 'settings')
                 with self.lock:
-                    self.session, self.settings = session, settings if isinstance(settings, dict) else {}
+                    self.session = session
                     self.checked = time.monotonic()
-                if time.monotonic() >= next_heartbeat:
-                    self.bridge.heartbeat()
-                    next_heartbeat = time.monotonic() + 30
             except (OSError, ValueError) as error:
                 with self.lock:
                     self.checked = 0
                 print('MONITOR:', error_message(error), flush=True)
+            if time.monotonic() >= next_settings:
+                try:
+                    settings = self.bridge.db('GET', 'settings')
+                    with self.lock:
+                        self.settings = settings if isinstance(settings, dict) else {}
+                    next_settings = time.monotonic() + SETTINGS_REFRESH
+                except (OSError, ValueError) as error:
+                    print('SETTINGS:', error_message(error), flush=True)
+            if time.monotonic() >= next_heartbeat:
+                try:
+                    self.bridge.heartbeat()
+                    next_heartbeat = time.monotonic() + 30
+                except (OSError, ValueError) as error:
+                    print('HEARTBEAT:', error_message(error), flush=True)
+                    next_heartbeat = time.monotonic() + 5
             self.stop.wait(0.5)
 
     def sender(self):
@@ -307,6 +338,9 @@ class CameraBridge:
             now, wall_ms = time.monotonic(), int(time.time() * 1000)
             with self.lock:
                 control = self.controller
+                if self.blocked:
+                    # Firmware refuses READY while a bin is full/stuck; wait for the operator.
+                    handshake_started = now
                 if not control.ready and now - handshake_started > 15:
                     raise RuntimeError('No AI_READY after 15s; check firmware, clear sensors and COM')
                 if not control.ready and now - last_hello >= 1:
@@ -318,11 +352,15 @@ class CameraBridge:
                 turn = control.turn
                 if turn:
                     rule = self.settings.get('rules', {}).get(self.bridge.types[turn.sensor], {})
-                    invalid = (now - self.frame_at > FRAME_MAX_AGE
-                               or now - self.checked > SESSION_MAX_AGE
-                               or not same_session(self.session, turn.session)
-                               or not valid_session(self.session, wall_ms)
-                               or not rule or rule.get('enabled') is False)
+                    stale = (now - self.frame_at > self.frame_max_age
+                             or now - self.checked > SESSION_MAX_AGE)
+                    known_bad = (not same_session(self.session, turn.session)
+                                 or not valid_session(self.session, wall_ms)
+                                 or not rule or rule.get('enabled') is False)
+                    # Fresh data is required to open a lid. Once the lid is open, only a known
+                    # session/rule change cancels; a slow request must not close it mid-drop
+                    # (send_drop re-reads the session before writing the event).
+                    invalid = known_bad or (stale and not turn.ack)
                     if not turn.dropped and (invalid or now >= turn.deadline
                                              or (turn.sent and not turn.ack and now >= turn.deadline - 4)):
                         control.cancel()
@@ -339,6 +377,8 @@ class CameraBridge:
                     elif not turn.sent and not turn.cancelled:
                         self.esp.write(f'GS_AI_ARM {turn.id} {turn.sensor}\n'.encode())
                         turn.sent = True
+                        # Firmware starts its AI_TTL on receipt; never end the turn before it does.
+                        turn.deadline = now + TURN_SECONDS + DROP_GRACE
                         print('ARM:', turn.id, self.bridge.types[turn.sensor], flush=True)
             chunk = self.esp.read(max(1, min(self.esp.in_waiting, 512)))
             for byte in chunk:
@@ -349,18 +389,27 @@ class CameraBridge:
                             result = self.controller.message(line, time.monotonic(), int(time.time() * 1000))
                             if line in ('GS_AI_BOOT 1', 'GS_AI_OFFLINE 1'):
                                 handshake_started = time.monotonic()
+                            if line == 'GS_AI_BOOT 1':
+                                self.blocked.clear()
+                            blocked = re.fullmatch(r'GS_BIN_(BLOCKED|CLEAR) ([12])(?: (occupied|no_echo))?', line)
+                            if blocked:
+                                (self.blocked.add if blocked[1] == 'BLOCKED' else self.blocked.discard)(int(blocked[2]))
+                                handshake_started = time.monotonic()
                             if result:
                                 # The monitor can invalidate a session between inference and DROP.
-                                if (time.monotonic() - self.checked <= SESSION_MAX_AGE
-                                        and same_session(self.session, result[2])
+                                # Stale data alone is not a reason to drop it: send_drop re-checks.
+                                if (same_session(self.session, result[2])
                                         and valid_session(self.session, result[1])):
+                                    if time.monotonic() - self.checked > SESSION_MAX_AGE:
+                                        print('DROP: session data stale; sender will re-check it', flush=True)
                                     try:
                                         self.drops.put_nowait(result)
                                     except queue.Full:
                                         raise RuntimeError('HTTP queue full; confirmed drop not queued')
                                 else:
                                     print('SKIPPED: session changed/offline at drop time', flush=True)
-                        if line.startswith(('GS_AI_ACK', 'GS_AI_DROP', 'GS_AI_DONE', 'GS_AI_READY', 'GS_AI_OFFLINE')):
+                        if line.startswith(('GS_AI_ACK', 'GS_AI_DROP', 'GS_AI_DONE', 'GS_AI_READY', 'GS_AI_OFFLINE',
+                                            'GS_BIN_BLOCKED', 'GS_BIN_CLEAR')):
                             print(line, flush=True)
                     buffer.clear()
                     overflow = False
@@ -378,6 +427,8 @@ class CameraBridge:
             self.controller.observe(label, score, present, clear, self.session, self.settings,
                                     fresh and not self.drops.full(),
                                     now, int(time.time() * 1000))
+            if self.blocked and not self.controller.turn:
+                return 'BIN_BLOCKED'
             if not self.controller.ready:
                 return 'WAIT_FIRMWARE'
             if self.controller.turn:
@@ -462,7 +513,7 @@ def main(argv=None):
                 stop.wait(0.01)
                 continue
             sequence, captured_at, frame = sample
-            if now - captured_at > FRAME_MAX_AGE or not camera.thread.is_alive():
+            if now - captured_at > FRAME_MAX_AGE + CAMERA_READ_GRACE or not camera.thread.is_alive():
                 raise RuntimeError('Camera frames are stale/disconnected; cancelling AI turn')
             key = cv2.waitKey(1) & 0xFF
             if key in (27, ord('q')):
