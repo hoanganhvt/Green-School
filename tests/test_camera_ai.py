@@ -366,6 +366,32 @@ class ImageTests(unittest.TestCase):
         self.assertTrue(0 <= score <= 1)
 
 
+class ArmingReasonTests(unittest.TestCase):
+    def test_reports_first_condition_that_blocks_arming(self):
+        wall_ms = int(time.time() * 1000)
+        session = {'uid': 'u1', 'studentCode': 'S1', 'username': 's1',
+                   'startedAt': wall_ms - 1000, 'expiresAt': wall_ms + 60000}
+        rules = {'rules': {'plastic': {'enabled': True}, 'metal': {'enabled': False}}}
+        control = camera.TurnController()
+        control.ready = True
+
+        def why(label='metal', score=0.9, present=True, clear=False, session=session, settings=rules):
+            control.observe(label, score, present, clear, session, settings, True, 1, wall_ms)
+            return control.why
+
+        self.assertEqual(why(), 'center square must be seen EMPTY first')
+        why(present=False, clear=True)
+        self.assertEqual(why(present=False), 'no object detected in the center square')
+        self.assertEqual(why(score=0.5), 'metal score below 0.75')
+        self.assertEqual(why(), 'Firebase rule for metal is disabled')
+        self.assertEqual(why(settings={'rules': {}}), 'no Firebase rule for metal')
+        self.assertEqual(why(label='plastic', session={}), 'no student session with >= 6 s left; scan QR')
+        self.assertIsNone(why(label='plastic'))
+        self.assertIsNone(control.turn)
+        why(label='plastic'); why(label='plastic')
+        self.assertIsNotNone(control.turn)
+
+
 class EdgeImpulseTests(unittest.TestCase):
     def fomo(self, grid):
         model = camera.EdgeImpulseFomo.__new__(camera.EdgeImpulseFomo)

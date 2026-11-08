@@ -12,7 +12,7 @@ void reset() {
   servo1 = Servo(); servo2 = Servo();
   demRac1 = demRac2 = 0; daDemRac1 = daDemRac2 = false;
   nap1Mo = nap2Mo = coiDangKeu = false;
-  countSensorsClear = false;
+  countSensorsClear = baoNap1Mo = baoNap2Mo = false;
   giuNap1Luc = giuNap2Luc = tatCoiLuc = 0;
   ket1 = ket2 = daBaoKet1 = daBaoKet2 = false; ketTu1 = ketTu2 = logLuc = 0;
   aiId[0] = lastId[0] = 0; aiArmed = aiOpened = aiDropped = aiLinked = false;
@@ -69,6 +69,8 @@ int main() {
   tick(); assert(nap1Mo && !nap2Mo);
   assert(servo1.pulses == std::vector<int>({1200, 1800}));
   assert(servo2.pulses == std::vector<int>({1200}));
+  assert(Serial.output.find("GS_LID 1 open 1800") != std::string::npos);
+  assert(Serial.output.find("GS_LID 2") == std::string::npos);
   distance(ECHO_DEM1, 5); tick();
   assert(demRac1 == 1 && aiDropped && !aiArmed && coiDangKeu);
   assert(Serial.output.find("GS_AI_DROP " + id + " 1 1") != std::string::npos);
@@ -78,6 +80,7 @@ int main() {
   distance(ECHO_DEM1, 9); tick(); assert(!daDemRac1);
   waitMs(2500); assert(!nap1Mo && aiId[0] == 0);
   assert(servo1.pulses == std::vector<int>({1200, 1800, 1200}));
+  assert(Serial.output.find("GS_LID 1 closed 1200") != std::string::npos);
   assert(Serial.output.find("GS_AI_DONE " + id + " drop") != std::string::npos);
   command("GS_AI_ARM " + id + " 1"); assert(!aiArmed);
   reset(); command("GS_AI_HELLO 1");

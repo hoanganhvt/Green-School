@@ -32,6 +32,7 @@ bool daDemRac1 = false, daDemRac2 = false;
 unsigned long giuNap1Luc = 0, giuNap2Luc = 0;
 bool nap1Mo = false, nap2Mo = false, coiDangKeu = false;
 bool countSensorsClear = false;
+bool baoNap1Mo = false, baoNap2Mo = false; // last lid state printed as GS_LID
 unsigned long tatCoiLuc = 0;
 
 char aiId[33] = "", lastId[33] = "";
@@ -143,6 +144,13 @@ void updateLid(Servo &servo, bool &opened, unsigned long &lastActive, float coun
   }
 }
 
+void reportLid(int sensor, bool opened, bool &reported) {
+  if (opened == reported) return;
+  reported = opened;
+  Serial.print("GS_LID "); Serial.print(sensor); Serial.print(opened ? " open " : " closed ");
+  Serial.println(opened ? XUNG_MO_US : XUNG_DONG_US);
+}
+
 void recordDrop(int sensor, float distance, bool &latched, unsigned long &counter) {
   // AI mode counts only into the lid the camera opened. Anything else near a sensor (a hand,
   // a full bin, the other bin) just latches, so it cannot later count as a fresh drop.
@@ -189,6 +197,8 @@ void setup() {
     servo1.attach(SERVO1_PIN, 1000, 2000); servo2.attach(SERVO2_PIN, 1000, 2000);
     servo1.writeMicroseconds(XUNG_DONG_US); servo2.writeMicroseconds(XUNG_DONG_US);
   }
+  // Build time identifies which copy of this sketch is actually on the board.
+  Serial.println("GS_FW " __DATE__ " " __TIME__);
   Serial.println(AI_CONTROL_ENABLED ? "GS_AI_BOOT 1" : "GS_AI_MANUAL 1");
 }
 
@@ -209,6 +219,9 @@ void loop() {
             AI_CONTROL_ENABLED && aiArmed && aiSensor == 1, now);
   updateLid(servo2, nap2Mo, giuNap2Luc, kcDem2,
             AI_CONTROL_ENABLED && aiArmed && aiSensor == 2, now);
+  // Report every lid command so a lid that does not move can be told apart from one never commanded.
+  reportLid(1, nap1Mo, baoNap1Mo);
+  reportLid(2, nap2Mo, baoNap2Mo);
   recordDrop(1, kcDem1, daDemRac1, demRac1);
   recordDrop(2, kcDem2, daDemRac2, demRac2);
   // Count only a new edge after an earlier sampling cycle opened the lid.

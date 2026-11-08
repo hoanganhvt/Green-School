@@ -176,12 +176,14 @@ class TurnController:
         self.counters = {1: 0, 2: 0}
         self.last_drop_ms = 0
         self.last_student = None
+        self.why = None  # why the latest frame could not count toward opening a lid
 
     def reset_frames(self):
         self.label, self.count = None, 0
 
     def observe(self, label, score, present, clear, session, settings, fresh, now, wall_ms):
         if self.turn is not None or not self.ready:
+            self.why = None
             self.reset_frames()
             return
         if clear:
@@ -192,13 +194,31 @@ class TurnController:
             cooldown = max(0, float(settings.get('cooldownSeconds', 3))) * 1000
         except (ValueError, TypeError):
             cooldown = 3000
-        if (not fresh or not self.cleared or not present or label not in self.mapping
-                or not math.isfinite(score) or score < self.threshold
-                or not isinstance(rule, dict) or rule.get('enabled') is False
-                or not valid_session(session, wall_ms + 6000, wall_ms)
-                or not session.get('uid')
-                or (session.get('studentCode') == self.last_student
-                    and wall_ms - self.last_drop_ms < cooldown)):
+        # First unmet condition, in plain words, so an operator can see why no lid opens.
+        if not fresh:
+            self.why = 'Firebase data is stale'
+        elif not self.cleared:
+            self.why = 'center square must be seen EMPTY first'
+        elif not present:
+            self.why = 'no object detected in the center square'
+        elif label not in self.mapping:
+            self.why = f'label {label} is not plastic/metal'
+        elif not math.isfinite(score) or score < self.threshold:
+            self.why = f'{label} score below {self.threshold:g}'
+        elif not isinstance(rule, dict):
+            self.why = f'no Firebase rule for {label}'
+        elif rule.get('enabled') is False:
+            self.why = f'Firebase rule for {label} is disabled'
+        elif not valid_session(session, wall_ms + 6000, wall_ms):
+            self.why = 'no student session with >= 6 s left; scan QR'
+        elif not session.get('uid'):
+            self.why = 'student session has no uid'
+        elif (session.get('studentCode') == self.last_student
+              and wall_ms - self.last_drop_ms < cooldown):
+            self.why = 'cooldown after the last drop'
+        else:
+            self.why = None
+        if self.why:
             self.reset_frames()
             return
         self.count = self.count + 1 if self.label == label else 1
@@ -457,7 +477,7 @@ class CameraBridge:
                                 else:
                                     print('SKIPPED: session changed/offline at drop time', flush=True)
                         if line.startswith(('GS_AI_ACK', 'GS_AI_DROP', 'GS_AI_DONE', 'GS_AI_READY', 'GS_AI_OFFLINE',
-                                            'GS_BIN_BLOCKED', 'GS_BIN_CLEAR')):
+                                            'GS_BIN_BLOCKED', 'GS_BIN_CLEAR', 'GS_LID', 'GS_FW')):
                             print(line, flush=True)
                     buffer.clear()
                     overflow = False
@@ -549,6 +569,7 @@ def main(argv=None):
     next_inference = time.monotonic()
     started = next_inference
     previous_inference = None
+    last_report, last_report_at = None, 0.0
     try:
         camera = CameraFrames(args.camera, stop)
         if not args.dry_run:
@@ -593,6 +614,13 @@ def main(argv=None):
             state = 'DRY_RUN'
             if runtime:
                 state = runtime.observe(label, score, present, clear, captured_at)
+                with runtime.lock:
+                    why = runtime.controller.why
+                # Terminal trace of what blocks arming; throttled so a flickering frame cannot flood it.
+                report = f'STATE {state}' + (f': {why}' if why and state == 'READY' else '')
+                if report != last_report and after - last_report_at >= 0.5:
+                    print(report, f'| {label} {score:.2f}', flush=True)
+                    last_report, last_report_at = report, after
             display = frame.copy()
             h, w = frame.shape[:2]
             side = min(h, w)
