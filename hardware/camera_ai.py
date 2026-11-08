@@ -20,6 +20,11 @@ from firebase_http_bridge import (DEFAULT_CONFIG, FirebaseBridge, error_message,
                                   load_bin_id, same_session, valid_session)
 
 LABELS = ('battery', 'biological', 'cardboard', 'glass', 'metal', 'paper', 'plastic', 'trash')
+EI_PATH = Path(__file__).with_name('models') / 'ei-trash-fomo.onnx'
+EI_SHA256 = '881ab8bc0cd90f88ec663b615fbaacdb45b3313e3b1741616f3f503deee24dec'
+EI_NAMES = {0: '_background', 1: 'kim loại', 2: 'rác nhựa'}
+EI_LABELS = (None, 'metal', 'plastic')  # output channel -> bin label
+EI_MIN_CELL = 0.5  # Edge Impulse's default FOMO cell threshold
 FRAME_MAX_AGE = 1.0
 SESSION_MAX_AGE = 2.5
 TURN_SECONDS = 5.0
@@ -30,13 +35,13 @@ BACKGROUND_ADAPT = 0.05
 ID = r'[a-f0-9]{32}'
 
 
-def preprocess(frame):
+def preprocess(frame, size=224):
     import cv2
     import numpy as np
     h, w = frame.shape[:2]
     side = min(h, w)
     crop = frame[(h - side) // 2:(h + side) // 2, (w - side) // 2:(w + side) // 2]
-    rgb = cv2.cvtColor(cv2.resize(crop, (224, 224)), cv2.COLOR_BGR2RGB)
+    rgb = cv2.cvtColor(cv2.resize(crop, (size, size)), cv2.COLOR_BGR2RGB)
     return np.ascontiguousarray(rgb.transpose(2, 0, 1)[None], dtype=np.float32) / 255.0
 
 
@@ -69,6 +74,49 @@ class WasteWise:
             raise ValueError('Invalid probability output; refusing hardware control')
         index = int(scores[0].argmax())
         return LABELS[index], float(scores[0, index])
+
+
+class EdgeImpulseFomo:
+    """Edge Impulse FOMO detector: a 12x12 grid of background/metal/plastic probabilities."""
+    def __init__(self, path=EI_PATH):
+        import hashlib
+        import onnxruntime as ort
+        if hashlib.sha256(Path(path).read_bytes()).hexdigest() != EI_SHA256:
+            raise ValueError('Edge Impulse model checksum mismatch; re-run convert_ei_model.py and update EI_SHA256')
+        options = ort.SessionOptions()
+        options.intra_op_num_threads = 2
+        self.session = ort.InferenceSession(str(path), sess_options=options,
+                                           providers=['CPUExecutionProvider'])
+        inputs, outputs = self.session.get_inputs(), self.session.get_outputs()
+        if (len(inputs) != 1 or inputs[0].shape != [1, 3, 96, 96]
+                or inputs[0].type != 'tensor(float)' or len(outputs) != 1
+                or outputs[0].shape != [1, 3, 12, 12]):
+            raise ValueError('Unsupported model input/output')
+        meta = self.session.get_modelmeta().custom_metadata_map
+        if meta.get('task') != 'fomo' or ast.literal_eval(meta.get('names', '{}')) != EI_NAMES:
+            raise ValueError('Model labels/task do not match the Edge Impulse FOMO model')
+        self.input_name = inputs[0].name
+        print('MODEL OK: Edge Impulse FOMO, metal/plastic, CPU, 96x96. License metadata:', meta.get('license'))
+
+    def predict(self, frame):
+        import numpy as np
+        grid = self.session.run(None, {self.input_name: preprocess(frame, 96)})[0]
+        if (grid.shape != (1, 3, 12, 12) or not np.isfinite(grid).all()
+                or np.min(grid) < 0 or np.max(grid) > 1
+                or not np.allclose(grid.sum(axis=1), 1, atol=0.001)):
+            raise ValueError('Invalid probability output; refusing hardware control')
+        # The strongest metal/plastic cell decides; weaker cells are FOMO's normal halo.
+        best = grid[0, 1:].reshape(2, -1).max(axis=1)
+        channel = int(best.argmax())
+        if best[channel] < EI_MIN_CELL:
+            return 'background', float(1 - best[channel])
+        return EI_LABELS[channel + 1], float(best[channel])
+
+
+def load_model(kind, path=None):
+    if kind == 'edge-impulse':
+        return EdgeImpulseFomo(path or EI_PATH)
+    return WasteWise(path or MODEL_PATH)
 
 
 class ClearGate:
@@ -458,7 +506,9 @@ def arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--camera', type=int, default=0)
     parser.add_argument('--fps', type=float, default=5)
-    parser.add_argument('--model', type=Path, default=MODEL_PATH)
+    parser.add_argument('--model-type', choices=('wastewise', 'edge-impulse'), default='wastewise',
+                        help='wastewise: 8-class classifier; edge-impulse: metal/plastic FOMO detector')
+    parser.add_argument('--model', type=Path, help='Model file; defaults to the pinned file for --model-type')
     parser.add_argument('--port')
     parser.add_argument('--config', type=Path, default=DEFAULT_CONFIG)
     parser.add_argument('--sensor1', choices=('plastic', 'metal'), default='plastic')
@@ -482,7 +532,7 @@ def arguments(argv=None):
 
 def main(argv=None):
     args = arguments(argv)
-    model = WasteWise(args.model)
+    model = load_model(args.model_type, args.model)
     if args.check_model:
         return
     import cv2

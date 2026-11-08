@@ -240,6 +240,14 @@ Tháo liên kết nắp khi thử lần đầu; servo dùng nguồn riêng phù 
 
 Trước khi chạy, lấy hết vật/tay khỏi ô giữa ảnh. Chương trình tự lấy nền lúc khởi động; đợi `MODEL OK` và giữ ô trống khoảng 1 giây đến khi thấy `CLEAR`, không cần nhấn C. Đưa chai nhựa/lon vào thử; Q hoặc Esc để thoát. Nếu camera 0 không đúng, thử `--camera 1`.
 
+Muốn dùng model Edge Impulse (chỉ 2 nhãn kim loại/nhựa, phát hiện vật thể 96×96) thay WasteWise, thêm `--model-type edge-impulse` vào mọi lệnh `camera_ai.py`, kể cả lệnh chạy thật ở mục 5.5:
+
+```powershell
+.\.venv\Scripts\python.exe hardware/camera_ai.py --model-type edge-impulse --camera 0 --fps 5 --dry-run
+```
+
+Mặc định vẫn là WasteWise. Thông tin model và giới hạn kiểm thử ở [hardware/models/README.md](hardware/models/README.md).
+
 `--dry-run` chỉ thử camera/model, không mở servo hay ghi Firebase. Giữ camera và ánh sáng cố định; nếu thay đổi thì lấy vật ra và calibrate bằng C lại. Model chỉ cho nhãn `plastic`/`metal` mở ngăn; thông tin artifact và giấy phép ở [hardware/models/README.md](hardware/models/README.md).
 
 ### 5.5. Chạy hệ thống mỗi ngày

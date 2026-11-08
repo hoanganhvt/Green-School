@@ -366,5 +366,60 @@ class ImageTests(unittest.TestCase):
         self.assertTrue(0 <= score <= 1)
 
 
+class EdgeImpulseTests(unittest.TestCase):
+    def fomo(self, grid):
+        model = camera.EdgeImpulseFomo.__new__(camera.EdgeImpulseFomo)
+        model.input_name = 'x'
+        model.session = Mock()
+        model.session.run.return_value = [grid]
+        return model
+
+    def grid(self, cells=()):
+        import numpy as np
+        grid = np.zeros((1, 3, 12, 12), dtype=np.float32)
+        grid[0, 0] = 1
+        for channel, row, col, value in cells:
+            grid[0, :, row, col] = 0
+            grid[0, channel, row, col] = value
+            grid[0, 0, row, col] = 1 - value
+        return grid
+
+    def test_strongest_cell_picks_label_and_background_is_not_a_bin_label(self):
+        import numpy as np
+        frame = np.zeros((240, 320, 3), dtype=np.uint8)
+        model = self.fomo(self.grid([(2, 5, 5, 0.9), (1, 1, 1, 0.6)]))
+        self.assertEqual(model.predict(frame), ('plastic', 0.8999999761581421))
+        self.assertEqual(model.session.run.call_args[0][1]['x'].shape, (1, 3, 96, 96))
+        self.assertEqual(self.fomo(self.grid([(1, 3, 3, 0.8)])).predict(frame)[0], 'metal')
+        label, score = self.fomo(self.grid([(2, 0, 0, 0.3)])).predict(frame)
+        self.assertEqual(label, 'background')
+        self.assertAlmostEqual(score, 0.7, places=5)
+        self.assertNotIn('background', camera.TurnController().mapping)
+
+    def test_invalid_grid_is_refused(self):
+        import numpy as np
+        frame = np.zeros((96, 96, 3), dtype=np.uint8)
+        bad = self.grid(); bad[0, 1, 0, 0] = 0.5  # cell no longer sums to 1
+        for grid in (bad, np.full((1, 3, 12, 12), np.nan, dtype=np.float32), np.zeros((1, 3, 6, 6), dtype=np.float32)):
+            with self.assertRaises(ValueError): self.fomo(grid).predict(frame)
+
+    def test_cli_selects_model_and_rejects_unpinned_file(self):
+        self.assertEqual(camera.arguments(['--check-model']).model_type, 'wastewise')
+        self.assertEqual(camera.arguments(['--check-model', '--model-type', 'edge-impulse']).model_type, 'edge-impulse')
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            camera.arguments(['--check-model', '--model-type', 'yolo'])
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'bad.onnx'; path.write_bytes(b'bad')
+            with self.assertRaises(ValueError): camera.load_model('edge-impulse', path)
+
+    @unittest.skipUnless(camera.EI_PATH.exists(), 'Edge Impulse model not present')
+    def test_real_edge_impulse_model_runs(self):
+        import numpy as np
+        model = camera.load_model('edge-impulse')
+        label, score = model.predict(np.zeros((480, 640, 3), dtype=np.uint8))
+        self.assertIn(label, ('background', 'metal', 'plastic'))
+        self.assertTrue(0 <= score <= 1)
+
+
 if __name__ == '__main__':
     unittest.main()
