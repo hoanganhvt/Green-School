@@ -275,7 +275,7 @@ Học sinh thao tác:
 1. Đăng nhập website bằng tài khoản học sinh. Quét QR hoặc mở https://smarttrashbin-98428.web.app/#/scan/BIN-01 để tạo phiên đúng thùng.
 2. Đưa **một** vật nhựa/kim loại vào ô camera. Mặc định cần confidence ≥ 0,75 và 3 mẫu ổn định; phiên còn ít nhất 6 giây, rule đang bật.
 3. Khi log có `ARM` và firmware trả `GS_AI_ACK`, nắp đúng ngăn được ra lệnh mở. **Nắp mở rồi mới thả rác.** Quét QR đơn thuần chưa mở servo.
-4. Cảm biến đúng ngăn xác nhận rác: log `GS_AI_DROP`, sau đó `SENT USB-...`. Backend hiện `PROCESSED` hoặc `REJECTED` kèm lý do.
+4. Cảm biến đúng ngăn xác nhận rác: log `GS_AI_DROP`, sau đó `SENT USB-...`. Ở chế độ AI, cảm biến chỉ đếm khi nắp ngăn đó đã được camera mở; tay hoặc vật đưa gần cảm biến lúc nắp đóng, hay rơi vào ngăn kia, không được đếm và không kêu còi. Backend hiện `PROCESSED` hoặc `REJECTED` kèm lý do.
 5. Lấy tay/vật ra, đợi nắp đóng, `GS_AI_DONE` và ô camera clear trước lượt tiếp theo. Kiểm tra lịch sử/điểm trên web.
 
 `SENT` nghĩa Firebase đã nhận event; **`PROCESSED` mới xác nhận cộng điểm**. Mặc định nhựa 2 điểm, kim loại 3 điểm, cooldown 3 giây và phiên 3 phút; admin có thể thay đổi. Hết phiên thì chọn **Bỏ rác tiếp** hoặc quét QR lại.

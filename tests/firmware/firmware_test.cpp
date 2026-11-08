@@ -49,7 +49,8 @@ int main() {
 #if AI_CONTROL_ENABLED
   command("GS_AI_HELLO 1"); assert(!aiLinked && Serial.output.find("GS_AI_READY") == std::string::npos);
 #endif
-  distance(ECHO_DEM1, 2.0f); distance(ECHO_DEM2, 20); tick(); assert(demRac1 == 1); // 2 cm is a valid reading
+  distance(ECHO_DEM1, 2.0f); distance(ECHO_DEM2, 20); tick(); assert(daDemRac1); // 2 cm is a valid reading
+  assert(demRac1 == (AI_CONTROL_ENABLED ? 0 : 1)); // AI mode counts only into a camera-opened lid
   reset();
 #if AI_CONTROL_ENABLED
   assert(servo1.pin == 18 && servo2.pin == 19);
@@ -58,6 +59,9 @@ int main() {
   assert(servo2.minUs == 1000 && servo2.maxUs == 2000);
   assert(servo1.pulses == std::vector<int>({1200}) && servo2.pulses == std::vector<int>({1200}));
   tick(); assert(!nap1Mo && !nap2Mo);
+  // A hand near a sensor while the lids are closed is not counted and does not beep.
+  distance(ECHO_DEM1, 5); tick(); distance(ECHO_DEM1, 20); tick();
+  assert(demRac1 == 0 && !coiDangKeu && Serial.output.find("GS_DROP") == std::string::npos);
   command("GS_AI_HELLO 1"); assert(aiLinked);
   command("GS_AI_ARM " + id + " 1"); assert(aiArmed);
   auto start = aiStarted;
@@ -83,7 +87,7 @@ int main() {
   tick(); assert(nap2Mo && !nap1Mo);
   assert(servo2.pulses == std::vector<int>({1200, 1800}));
   assert(servo1.pulses == std::vector<int>({1200}));
-  distance(ECHO_DEM1, 5); tick(); assert(demRac1 == 1 && !aiDropped);
+  distance(ECHO_DEM1, 5); tick(); assert(daDemRac1 && demRac1 == 0 && !aiDropped); // other bin: not counted
   distance(ECHO_DEM2, 0);
   clockMs += 3100; tick(); assert(!aiArmed && !aiLinked && nap2Mo);
   assert(Serial.output.find("GS_AI_OFFLINE 1") != std::string::npos);
@@ -92,7 +96,7 @@ int main() {
   assert(servo2.pulses == std::vector<int>({1200, 1800, 1200}));
   reset(); command("GS_AI_HELLO 1"); command("GS_AI_ARM " + id + " 1");
   distance(ECHO_DEM1, 5); tick();
-  assert(nap1Mo && demRac1 == 1 && !aiDropped); // pre-existing count on opening is not a drop
+  assert(nap1Mo && daDemRac1 && demRac1 == 0 && !aiDropped); // item already there as the lid opens: not a drop
   reset(); command("GS_AI_HELLO 1"); command("GS_AI_ARM " + id + " 1");
   tick();
   clockMs += 2000; command("GS_AI_PING"); tick();

@@ -144,11 +144,16 @@ void updateLid(Servo &servo, bool &opened, unsigned long &lastActive, float coun
 }
 
 void recordDrop(int sensor, float distance, bool &latched, unsigned long &counter) {
+  // AI mode counts only into the lid the camera opened. Anything else near a sensor (a hand,
+  // a full bin, the other bin) just latches, so it cannot later count as a fresh drop.
+  bool counting = !AI_CONTROL_ENABLED || (aiArmed && aiOpened && !aiDropped && sensor == aiSensor);
   if (distance > 0 && distance <= NGUONG_DEM_RAC && !latched) {
-    latched = true; counter++;
+    latched = true;
+    if (!counting) return;
+    counter++;
     Serial.print("GS_DROP "); Serial.print(sensor); Serial.print(" "); Serial.println(counter);
     baoCoi();
-    if (AI_CONTROL_ENABLED && aiArmed && aiOpened && !aiDropped && sensor == aiSensor) {
+    if (AI_CONTROL_ENABLED) {
       aiDropped = true; aiArmed = false; aiReason = "drop";
       Serial.print("GS_AI_DROP "); Serial.print(aiId); Serial.print(" ");
       Serial.print(sensor); Serial.print(" "); Serial.println(counter);
