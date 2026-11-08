@@ -19,8 +19,6 @@ venv/
 .env
 .env.*
 !.env.example
-.secrets/
-secrets/
 *service-account*.json
 *firebase-adminsdk*.json
 *.pem
