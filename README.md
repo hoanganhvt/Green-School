@@ -207,8 +207,8 @@ File ví dụ trên không tự được tạo khi copy `.env.example`. Nếu ch
 
 | Thiết bị | GPIO |
 | --- | --- |
-| HC-SR04 đếm ngăn nhựa: TRIG / ECHO | 23 / 34 |
-| HC-SR04 đếm ngăn kim loại: TRIG / ECHO | 22 / 35 |
+| HC-SR04 đếm ngăn nhựa: TRIG / ECHO | 22 / 23 |
+| HC-SR04 đếm ngăn kim loại: TRIG / ECHO | 13 / 14 |
 | Servo ngăn nhựa / kim loại | 18 / 19 |
 | Module còi kích LOW | 27 |
 

@@ -1,14 +1,16 @@
-﻿#include <ESP32Servo.h>
+﻿// new ver
+
+#include <ESP32Servo.h>
 
 // Set to 0 for count-only USB bridge mode; servos stay detached so lids can be opened by hand.
 #ifndef AI_CONTROL_ENABLED
 #define AI_CONTROL_ENABLED 1
 #endif
 
-#define TRIG_DEM1 23
-#define ECHO_DEM1 34
-#define TRIG_DEM2 22
-#define ECHO_DEM2 35
+#define TRIG_DEM1 22 // Plastic bin HC-SR04
+#define ECHO_DEM1 23 // via 1k/2k divider to 3.3 V
+#define TRIG_DEM2 13 // Metal bin HC-SR04
+#define ECHO_DEM2 14 // via 1k/2k divider to 3.3 V
 #define SERVO1_PIN 18 // Plastic bin
 #define SERVO2_PIN 19 // Metal bin
 #define BUZZER_PIN 27

@@ -24,7 +24,7 @@ void reset() {
 const std::string id(32, 'a');
 int main() {
   assert(SERVO1_PIN == 18 && SERVO2_PIN == 19);
-  assert(TRIG_DEM1 == 23 && ECHO_DEM1 == 34 && TRIG_DEM2 == 22 && ECHO_DEM2 == 35);
+  assert(TRIG_DEM1 == 22 && ECHO_DEM1 == 23 && TRIG_DEM2 == 13 && ECHO_DEM2 == 14);
   reset();
   assert(pins[BUZZER_PIN] == HIGH);
   // Each sensor must be sampled often enough to see an item falling past its beam.
