@@ -8,12 +8,18 @@ public/
 backups/
 
 # Logs and Python environments are specific to each machine.
-*-debug.log
-*-debug.*.log
+# A .venv only works on the machine (and Python version) that created it.
+.venv/
+venv/
+*.log
 __pycache__/
 *.py[cod]
 
 # Keep the shareable template; never commit credentials or account passwords.
+.env
+.env.*
+!.env.example
+secrets/
 *service-account*.json
 *firebase-adminsdk*.json
 *.pem
@@ -24,5 +30,9 @@ __pycache__/
 # Keep model weights in Git; ignore interrupted downloads.
 hardware/models/*.download
 
+# Editor and OS files.
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
+desktop.ini
