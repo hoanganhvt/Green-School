@@ -11,14 +11,9 @@ backups/
 *-debug.log
 *-debug.*.log
 __pycache__/
-.venv/
-venv/
 *.py[cod]
 
 # Keep the shareable template; never commit credentials or account passwords.
-.env
-.env.*
-!.env.example
 *service-account*.json
 *firebase-adminsdk*.json
 *.pem
