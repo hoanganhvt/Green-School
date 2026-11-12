@@ -113,6 +113,24 @@ class EdgeImpulseFomo:
         return EI_LABELS[channel + 1], float(best[channel])
 
 
+def session_problem(session, wall_ms, bin_id):
+    """Why the laptop rejects the bin's session. Session times come from the Firebase server clock."""
+    if not isinstance(session, dict):
+        return f'no session on {bin_id}; scan the QR of {bin_id}'
+    if not session.get('studentCode') or not session.get('username'):
+        return 'session has no student; scan QR again'
+    started, expires = session.get('startedAt'), session.get('expiresAt')
+    if not isinstance(started, (int, float)) or not isinstance(expires, (int, float)):
+        return 'session has no valid start/expiry time; scan QR again'
+    if started > wall_ms:
+        return (f'session starts {(started - wall_ms) / 1000:.0f} s in the future: '
+                'laptop clock is behind, sync Windows time')
+    if expires <= wall_ms:
+        return (f'session expired {(wall_ms - expires) / 1000:.0f} s ago: scan QR again '
+                '(if you just scanned, the laptop clock is ahead; sync Windows time)')
+    return 'session has < 6 s left; tap continue or scan QR again'
+
+
 def load_model(kind, path=None):
     if kind == 'edge-impulse':
         return EdgeImpulseFomo(path or EI_PATH)
@@ -505,6 +523,7 @@ class CameraBridge:
             if not fresh:
                 return 'WAIT_FIREBASE'
             if not valid_session(self.session, time.time() * 1000 + 6000):
+                self.controller.why = session_problem(self.session, time.time() * 1000, self.bridge.bin_id)
                 return 'SCAN_QR'
             return 'READY' if self.controller.cleared else 'WAIT_CLEAR'
 
@@ -617,7 +636,7 @@ def main(argv=None):
                 with runtime.lock:
                     why = runtime.controller.why
                 # Terminal trace of what blocks arming; throttled so a flickering frame cannot flood it.
-                report = f'STATE {state}' + (f': {why}' if why and state == 'READY' else '')
+                report = f'STATE {state}' + (f': {why}' if why and state in ('READY', 'SCAN_QR') else '')
                 if report != last_report and after - last_report_at >= 0.5:
                     print(report, f'| {label} {score:.2f}', flush=True)
                     last_report, last_report_at = report, after

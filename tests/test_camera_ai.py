@@ -150,7 +150,7 @@ class SerialIntegrationTests(unittest.TestCase):
         runtime.session = {'uid': 'u1', 'studentCode': 'S1', 'username': 's1',
                            'startedAt': wall_ms - 1000, 'expiresAt': wall_ms + 60000}
         runtime.settings = {'rules': {'plastic': {'enabled': True}}}
-        runtime.bridge = type('Bridge', (), {'types': {1: 'plastic', 2: 'metal'}})()
+        runtime.bridge = type('Bridge', (), {'types': {1: 'plastic', 2: 'metal'}, 'bin_id': 'BIN-01'})()
         runtime.frame_at = runtime.checked = time.monotonic()
         runtime.drops = queue.Queue(maxsize=100)
         runtime.blocked = set()
@@ -390,6 +390,19 @@ class ArmingReasonTests(unittest.TestCase):
         self.assertIsNone(control.turn)
         why(label='plastic'); why(label='plastic')
         self.assertIsNotNone(control.turn)
+
+
+class SessionProblemTests(unittest.TestCase):
+    def test_explains_missing_expired_and_clock_skew(self):
+        now = 1_000_000_000_000
+        ok = {'studentCode': 'S1', 'username': 's1', 'startedAt': now - 1000, 'expiresAt': now + 60000}
+        problem = lambda session: camera.session_problem(session, now, 'BIN-01')
+        self.assertIn('no session on BIN-01', problem(None))
+        self.assertIn('no student', problem({**ok, 'username': ''}))
+        self.assertIn('120 s in the future', problem({**ok, 'startedAt': now + 120000}))
+        self.assertIn('laptop clock is behind', problem({**ok, 'startedAt': now + 120000}))
+        self.assertIn('expired 30 s ago', problem({**ok, 'expiresAt': now - 30000}))
+        self.assertIn('< 6 s left', problem({**ok, 'expiresAt': now + 3000}))
 
 
 class EdgeImpulseTests(unittest.TestCase):
